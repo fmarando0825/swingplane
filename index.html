@@ -127,6 +127,7 @@
     <button id="redo" class="ghost" style="display:none">Redo</button>
     <button id="newref" class="ghost" style="display:none">New reference</button>
     <button id="rearm" class="ghost" style="display:none">Re-arm</button>
+    <button id="share" class="ghost" style="display:none">Share swing</button>
   </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -166,11 +167,23 @@ function decodeSwing(){
     gyro.push([dv.getInt16(o,true)/rx.gs, dv.getInt16(o+2,true)/rx.gs, dv.getInt16(o+4,true)/rx.gs]);   // rad/s
     accel.push([dv.getInt16(o+6,true)/rx.as, dv.getInt16(o+8,true)/rx.as, dv.getInt16(o+10,true)/rx.as]); // m/s^2
   }
+  // stash the raw swing for the Share button (debug: paste to Claude)
+  let s=''; const u=rx.bytes;
+  for(let i=0;i<u.length;i+=8192) s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));
+  lastRaw={hz:rx.hz, gs:rx.gs, as:rx.as, n:n, b64:btoa(s)};
+  $("share").style.display='';
   analyze(gyro,accel,rx.hz);
 }
 
 // ---- reference-swing pool (average a few good swings into one plane) ----
 let mode='build', pool=[], refNormal=null, refG0=null, isConn=false, pendingNref=null;
+let lastRaw=null;
+$("share").onclick=async()=>{
+  if(!lastRaw)return;
+  const txt="SWINGPLANE_RAW "+JSON.stringify(lastRaw);
+  try{ await navigator.clipboard.writeText(txt); setStat("swing copied — paste it to Claude",true); }
+  catch(e){ window.prompt("Copy this and paste it to Claude:", txt); }
+};
 const REF_TARGET=3;
 
 function rebuildRef(){
@@ -371,17 +384,20 @@ function analyze(gyro,accel,hz){
     const w=sub(gyro[i],bias), wm=norm(w);
     const clipped = Math.abs(gyro[i][0])>SATA||Math.abs(gyro[i][1])>SATA||Math.abs(gyro[i][2])>SATA;
     if(wm>1e-6 && !clipped){ const dq=quatFromAxisAngle(scl(w,1/wm), wm*dt); q=qmul(q,dq); }
-    if(i>=s0 && i<=iMax){
-      const raw = applyR(rotVec(q, shaftAxis));
-      // keep the integrated sweep for the SHAPE, but force the off-plane angle to the
-      // MEASURED deviation (same trusted number as the score) — so on-plane = in the disc
-      const d = devSmooth[i-s0]*Math.PI/180;
-      let pin = sub(raw, scl(Nworld, dot(raw,Nworld)));
-      pin = (norm(pin)>1e-4) ? unit(pin) : unit(cross(Nworld,[0,1,0]));
-      const sgn = dot(raw,Nworld)>=0 ? 1 : -1;
-      arc.push(add(scl(pin, Math.cos(d)), scl(Nworld, sgn*Math.sin(d))));
-      devArc.push(devSmooth[i-s0]);
-    }
+    if(i>=s0 && i<=iMax){ arc.push(applyR(rotVec(q, shaftAxis))); devArc.push(devSmooth[i-s0]); }
+  }
+  // Rigid-align the whole arc: keep its smooth integrated shape, but orient it so its
+  // downswing plane sits at exactly the MEASURED angle from the reference disc.
+  // (Nself vs Nplane is a direct sensor-frame measurement — no integration drift in it.)
+  {
+    const M=[[0,0,0],[0,0,0],[0,0,0]];
+    for(let i=dTop;i<=dImp && i<arc.length;i++){ const p=arc[i];
+      for(let r=0;r<3;r++)for(let c=0;c<3;c++)M[r][c]+=p[r]*p[c]; }
+    const e=eigSym3(M); let Na=unit(e.vec[0]);   // drawn arc's own downswing plane
+    const Nt=unit(applyR(Nself));                 // where that plane truly sits vs the disc
+    if(dot(Na,Nt)<0)Na=scl(Na,-1);
+    const qa=quatAlign(Na,Nt);
+    for(let i=0;i<arc.length;i++) arc[i]=rotVec(qa,arc[i]);
   }
   lastArc={arc,devArc,normal:Nworld,topIdx:dTop,hz};
   drawSwing();
@@ -484,11 +500,11 @@ function drawSwing(){
   // fitted downswing plane as a translucent disc through the origin
   const nrm=new THREE.Vector3(mirror*normal[0],normal[1],normal[2]).normalize();
   const disc=new THREE.Mesh(new THREE.CircleGeometry(R*1.05,48),
-    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.10,side:THREE.DoubleSide}));
+    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.18,side:THREE.DoubleSide}));
   disc.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),nrm);
   planeObj=new THREE.Group(); planeObj.add(disc);
   const ring=new THREE.Mesh(new THREE.RingGeometry(R*1.03,R*1.05,48),
-    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.4,side:THREE.DoubleSide}));
+    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.6,side:THREE.DoubleSide}));
   ring.quaternion.copy(disc.quaternion); planeObj.add(ring);
   grp.add(planeObj);
 
