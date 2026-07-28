@@ -309,45 +309,70 @@ function analyze(gyro,accel,hz){
   for(let i=0;i<N0;i++) g0=add(g0,accel[i]);
   g0=unit(scl(g0,1/N0));
 
+  // --- shaft axis (sensor frame) from centripetal accel near impact ---
+  // Needed BEFORE the plane fit: the club's roll/release spins about this axis and is
+  // NOT plane motion. Use fast, UNSATURATED samples (MPU-6050 accel rails at ±16g).
+  const ARAIL=16*9.81*0.98;
+  let sa=[0,0,0], cnt=0;
+  for(let i=tTop;i<=iMax;i++){
+    if(sm[i] < 0.6*sm[iMax]) continue;
+    const a=accel[i];
+    if(Math.abs(a[0])>ARAIL||Math.abs(a[1])>ARAIL||Math.abs(a[2])>ARAIL) continue;
+    sa=add(sa,a); cnt++;
+  }
+  const shaftUp = cnt>=3 ? unit(scl(sa,1/cnt)) : unit(g0);   // head -> hands
+  const deroll = w => sub(w, scl(shaftUp, dot(w,shaftUp)));  // strip the release spin
+
   // --- this swing's own plane (candidate / reference building block) ---
-  // Derived from the DOWNSWING, where swing rotation dominates. The takeaway is
-  // too slow — face/shaft roll rivals the swing there and the axis can lock ~90° off.
-  function axisIn(a,b){
+  // Only the FAST part of the downswing is trustworthy: below ~half peak speed the
+  // release roll rivals the swing rotation and the axis reading is meaningless.
+  const FASTGATE=0.5;
+  function axisIn(a,b,gate){
     const V=[],W=[];
-    for(let i=a;i<b;i++){ const m=norm(gyro[i]); if(m<floor)continue; V.push(scl(gyro[i],1/m)); W.push(m); }
+    for(let i=a;i<b;i++){
+      if(gate>0 && sm[i] < gate*sm[iMax]) continue;
+      const w=deroll(gyro[i]); const m=norm(w); if(m<floor)continue;
+      V.push(scl(w,1/m)); W.push(m);
+    }
     if(V.length<5)return null;
     let ax=unit(principalAxis(V,W));
     let s=0; for(let i=0;i<V.length;i++) s+=Math.sign(dot(V[i],ax))*W[i];
     return s<0?scl(ax,-1):ax;
   }
-  const Nself = axisIn(tTop,iMax) || axisIn(s0,iMax);
+  const Nself = axisIn(tTop,iMax+1,FASTGATE) || axisIn(tTop,iMax+1,0.3) || axisIn(tTop,iMax+1,0);
   if(!Nself){ $("hint").textContent="couldn't read that swing — try again"; return; }
 
   // downswing tightness -> weight when averaging (a steadier swing earns more trust)
   let tse=0,tsw=0;
-  for(let i=tTop;i<iMax;i++){ const m=norm(gyro[i]); if(m<floor)continue;
-    const a=Math.acos(Math.min(1,Math.abs(dot(scl(gyro[i],1/m),Nself))))*57.2958; tse+=a*a; tsw++; }
+  for(let i=tTop;i<iMax;i++){
+    if(sm[i] < FASTGATE*sm[iMax]) continue;
+    const w=deroll(gyro[i]); const m=norm(w); if(m<floor)continue;
+    const a=Math.acos(Math.min(1,Math.abs(dot(scl(w,1/m),Nself))))*57.2958; tse+=a*a; tsw++; }
   const weight=1/(tse/(tsw||1)+1);
 
   // grade against the AVERAGED reference once locked; otherwise against this swing itself
   const Nplane = (mode==='score' && refNormal) ? refNormal : Nself;
 
-  // --- per-sample deviation from the plane, takeaway through impact (sign-agnostic) ---
-  // SAT guards a ±2000 dps sensor (MPU-6050): ~34.9 rad/s is the rail — hold through clipped samples
+  // --- per-sample deviation from the plane (roll removed, sign-agnostic) ---
+  // Where the club is too slow to measure, hold the last trustworthy reading.
   const dev=[]; let prev=0; const SAT=33;
   for(let i=s0;i<=iMax;i++){
-    const g=gyro[i], m=norm(g);
+    const g=gyro[i];
     const clipped = Math.abs(g[0])>SAT||Math.abs(g[1])>SAT||Math.abs(g[2])>SAT;
-    let d = (m<floor||clipped) ? prev : Math.acos(Math.min(1,Math.abs(dot(scl(g,1/m),Nplane))))*57.2958;
+    const w=deroll(g), m=norm(w);
+    const weak = sm[i] < FASTGATE*sm[iMax];
+    let d = (m<floor||clipped||weak) ? prev : Math.acos(Math.min(1,Math.abs(dot(scl(w,1/m),Nplane))))*57.2958;
     prev=d; dev.push(d);
   }
   const devSmooth=dev.map((_,i)=>{let s=0,c=0;for(let k=-2;k<=2;k++){const j=i+k;if(j>=0&&j<dev.length){s+=dev[j];c++;}}return s/c;});
 
-  // downswing slice (top -> impact) is what we score & strip
+  // downswing slice (top -> impact) is what we score & strip — measurable samples only
   const dTop=tTop-s0, dImp=iMax-s0;
   let se=0,sw=0,maxDrift=0,leftAt=-1;
   for(let i=dTop;i<=dImp;i++){
-    const w=norm(gyro[i+s0]); const d=devSmooth[i];
+    const idx=i+s0;
+    if(sm[idx] < FASTGATE*sm[iMax]) continue;   // roll-dominated: not a real plane reading
+    const w=norm(gyro[idx]); const d=devSmooth[i];
     se+=w*d*d; sw+=w>0?w:0;
     if(d>maxDrift)maxDrift=d;
     if(leftAt<0 && d>OFF_THRESH) leftAt=(i-dTop)/(dImp-dTop);
@@ -360,13 +385,18 @@ function analyze(gyro,accel,hz){
   pendingNref = (mode==='build') ? {normal:Nself, w:weight, g0:g0.slice()} : null;
 
   // --- reconstruct the real shaft-direction arc, in a STABLE display frame ---
-  // Shaft axis (sensor frame): near impact the accelerometer points up the shaft
-  // (centripetal). Negate it so the arc points at the CLUBHEAD -> swings toward the ground.
-  let sa=[0,0,0], cnt=0;
-  for(let i=Math.max(tTop,iMax-25);i<=iMax;i++){ sa=add(sa,accel[i]); cnt++; }
-  const shaftAxis = scl(unit(scl(sa, 1/Math.max(1,cnt))), -1);
-  // gyro bias from the initial still samples (cuts MPU-6050 integration drift)
-  let bias=[0,0,0]; for(let i=0;i<s0;i++) bias=add(bias,gyro[i]); bias=scl(bias,1/Math.max(1,s0));
+  // Reuse the vetted shaft axis (fast, unsaturated samples); negate so the arc points
+  // at the CLUBHEAD -> the club swings down toward the ground.
+  const shaftAxis = scl(shaftUp, -1);
+  // Gyro bias: use the QUIETEST 20-sample window anywhere in the capture. The club is
+  // often already moving when the buffer opens, and using those samples would subtract
+  // real motion as "drift" and bend the whole arc.
+  let bias=[0,0,0], bq=1e9, bIdx=-1;
+  for(let i=0;i+20<=n;i++){ let s=0; for(let k=0;k<20;k++) s+=norm(gyro[i+k]); s/=20;
+    if(s<bq){ bq=s; bIdx=i; } }
+  if(bIdx>=0 && bq<0.15){   // only trust it if genuinely still (<~9 deg/s)
+    for(let k=0;k<20;k++) bias=add(bias,gyro[bIdx+k]); bias=scl(bias,1/20);
+  }
   // Fixed display frame: gravity gives "up", the plane fixes the azimuth. In score mode
   // we use the LOCKED reference gravity so the disc doesn't shift swing to swing.
   const gUp = (mode==='score' && refG0) ? refG0 : g0;
@@ -468,7 +498,8 @@ function initGL(){
   const post=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,1.6,0)]),
                             new THREE.LineBasicMaterial({color:0x2A3830}));
   scene.add(post);
-  grp=new THREE.Group(); grp.position.y=1.0; scene.add(grp);
+  grp=new THREE.Group(); grp.position.y=1.4; scene.add(grp);   // = arc radius, so the
+  // clubhead's lowest point lands exactly on the floor at the centre of the grid
   resize(); window.addEventListener('resize',resize);
   (function loop(){requestAnimationFrame(loop); controls.update(); renderer.render(scene,cam);})();
 }
@@ -512,8 +543,8 @@ function drawSwing(){
 }
 function setView(){
   const v=document.querySelector('#view .sel').dataset.v;
-  if(v==='down') cam.position.set(0.2,1.4,3.4); else cam.position.set(3.4,1.4,0.2);
-  controls.target.set(0,1.0,0);
+  if(v==='down') cam.position.set(0.2,1.6,3.8); else cam.position.set(3.8,1.6,0.2);
+  controls.target.set(0,1.1,0);
 }
 
 // segmented toggles
