@@ -170,14 +170,15 @@ function decodeSwing(){
 }
 
 // ---- reference-swing pool (average a few good swings into one plane) ----
-let mode='build', pool=[], refNormal=null, isConn=false, pendingNref=null;
+let mode='build', pool=[], refNormal=null, refG0=null, isConn=false, pendingNref=null;
 const REF_TARGET=3;
 
 function rebuildRef(){
-  if(!pool.length){ refNormal=null; return; }
-  const anchor=pool[0].normal; let acc=[0,0,0], W=0;
-  for(const p of pool){ const nn=dot(p.normal,anchor)<0?scl(p.normal,-1):p.normal; acc=add(acc,scl(nn,p.w)); W+=p.w; }
+  if(!pool.length){ refNormal=null; refG0=null; return; }
+  const anchor=pool[0].normal; let acc=[0,0,0], W=0, ga=[0,0,0];
+  for(const p of pool){ const nn=dot(p.normal,anchor)<0?scl(p.normal,-1):p.normal; acc=add(acc,scl(nn,p.w)); W+=p.w; ga=add(ga,p.g0||[0,1,0]); }
   refNormal=unit(scl(acc,1/(W||1)));
+  refG0=unit(scl(ga,1/pool.length));
 }
 async function rearm(){ try{ await ctrlChar.writeValue(Uint8Array.of(1)); setStat("armed — swing away",true);}catch(e){} }
 function refreshUI(){
@@ -200,7 +201,7 @@ $("keep").onclick=()=>{ if(pendingNref){ pool.push(pendingNref); rebuildRef(); p
   if(pool.length>=REF_TARGET) mode='score'; rearm(); refreshUI(); } };
 $("redo").onclick=()=>{ pendingNref=null; rearm(); refreshUI(); };
 $("lockref").onclick=()=>{ if(pool.length>=2){ mode='score'; refreshUI(); } };
-$("newref").onclick=()=>{ pool=[]; refNormal=null; mode='build'; pendingNref=null; rearm(); refreshUI(); };
+$("newref").onclick=()=>{ pool=[]; refNormal=null; refG0=null; mode='build'; pendingNref=null; rearm(); refreshUI(); };
 
 $("connect").onclick=async()=>{
   if(!navigator.bluetooth){ alert("This browser has no Web Bluetooth. Use Chrome on Android."); return; }
@@ -343,25 +344,32 @@ function analyze(gyro,accel,hz){
   const refTilt=Math.abs(90-Math.acos(Math.min(1,Math.abs(dot(Nplane,g0))))*57.2958);
 
   // stash this swing so "Keep sample" can fold its plane into the average (build mode only)
-  pendingNref = (mode==='build') ? {normal:Nself, w:weight} : null;
+  pendingNref = (mode==='build') ? {normal:Nself, w:weight, g0:g0.slice()} : null;
 
-  // --- build the arc from the plane rotation itself (mount-agnostic) ---
-  // The club sweeps the plane by angle theta = integral of (omega . planeNormal).
-  // Point on the arc = a unit vector in the plane at that angle, lifted out of the
-  // plane where the swing goes off it. No shaft-axis guess, so it can't point wrong,
-  // and it always lies in the disc.
-  const qInit = quatAlign(g0,[0,1,0]);          // gravity -> world up, so the plane tilts correctly
-  const Nworld = unit(rotVec(qInit, Nplane));
-  let uax = cross(Nworld,[0,1,0]); if(norm(uax)<1e-3) uax=cross(Nworld,[1,0,0]); uax=unit(uax);
-  const vax = unit(cross(Nworld, uax));
+  // --- reconstruct the real shaft-direction arc, in a STABLE display frame ---
+  // Shaft axis (sensor frame): near impact the accelerometer points up the shaft
+  // (centripetal). Negate it so the arc points at the CLUBHEAD -> swings toward the ground.
+  let sa=[0,0,0], cnt=0;
+  for(let i=Math.max(tTop,iMax-25);i<=iMax;i++){ sa=add(sa,accel[i]); cnt++; }
+  const shaftAxis = scl(unit(scl(sa, 1/Math.max(1,cnt))), -1);
+  // gyro bias from the initial still samples (cuts MPU-6050 integration drift)
+  let bias=[0,0,0]; for(let i=0;i<s0;i++) bias=add(bias,gyro[i]); bias=scl(bias,1/Math.max(1,s0));
+  // Fixed display frame: gravity gives "up", the plane fixes the azimuth. In score mode
+  // we use the LOCKED reference gravity so the disc doesn't shift swing to swing.
+  const gUp = (mode==='score' && refG0) ? refG0 : g0;
+  const s_up = unit(gUp);
+  let hh = sub(Nplane, scl(s_up, dot(Nplane,s_up)));
+  const s_h = (norm(hh)>1e-3) ? unit(hh) : unit(cross(s_up,[1,0,0]));
+  const s_t = unit(cross(s_up, s_h));
+  const wU=[0,1,0], wH=[0,0,-1], wT=[-1,0,0];
+  const applyR = v => add(add(scl(wU,dot(v,s_up)), scl(wH,dot(v,s_h))), scl(wT,dot(v,s_t)));
+  const Nworld = unit(applyR(Nplane));
+  let q=[1,0,0,0];
   const arc=[]; const devArc=[];
-  let theta=0;
-  for(let i=s0;i<=iMax;i++){
-    theta += dot(gyro[i], Nplane)*dt;            // in-plane sweep angle (frame-independent)
-    const d = devSmooth[i-s0];
-    const lift = 0.55*Math.min(1, d/25);         // bulge out of the plane where off-plane
-    const p = add(add(scl(uax, Math.cos(theta)), scl(vax, Math.sin(theta))), scl(Nworld, lift));
-    arc.push(p); devArc.push(d);
+  for(let i=0;i<n;i++){
+    const w=sub(gyro[i],bias), wm=norm(w);
+    if(wm>1e-6){ const dq=quatFromAxisAngle(scl(w,1/wm), wm*dt); q=qmul(q,dq); }
+    if(i>=s0 && i<=iMax){ arc.push(applyR(rotVec(q, shaftAxis))); devArc.push(devSmooth[i-s0]); }
   }
   lastArc={arc,devArc,normal:Nworld,topIdx:dTop,hz};
   drawSwing();
