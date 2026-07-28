@@ -142,21 +142,35 @@ let ctrlChar=null, device=null;
 const $=id=>document.getElementById(id);
 function setStat(t,live){ $("stat").textContent=t; $("dot").classList.toggle("live",!!live); }
 
-// incoming-packet reassembly
-let rx={active:false,need:0,got:0,gs:400,as:100,hz:500,bytes:null};
+// incoming-packet reassembly (sequence-numbered, loss-detecting)
+let rx={active:false,need:0,gs:400,as:100,hz:500,bytes:null,seen:null,pkts:0};
+let rxTimer=null;
+function rxFail(msg){
+  rx.active=false; if(rxTimer){clearTimeout(rxTimer);rxTimer=null;}
+  setStat(msg,false); $("hint").textContent="swing dropped in transit — take another";
+  autoArm(2);
+}
 function onPacket(dv){
   const b=new Uint8Array(dv.buffer);
-  if(!rx.active && b.length>=14 && b[0]===0xA5 && b[1]===0x5A){
+  // A header ALWAYS restarts reassembly. Previously a new swing's header could bleed
+  // into an unfinished one and get analysed as if it were the tail of the old swing.
+  if(b.length>=14 && b[0]===0xA5 && b[1]===0x5A){
     const count=b[2]|(b[3]<<8); rx.hz=b[4]|(b[5]<<8);
     rx.gs=dv.getFloat32(6,true); rx.as=dv.getFloat32(10,true);
-    rx.need=count*12; rx.got=0; rx.bytes=new Uint8Array(rx.need); rx.active=true;
+    rx.need=count*12; rx.bytes=new Uint8Array(rx.need);
+    rx.seen=new Set(); rx.pkts=Math.ceil(count/10); rx.active=true;
     $("hint").textContent="reading swing…";
+    if(rxTimer)clearTimeout(rxTimer);
+    rxTimer=setTimeout(()=>{ if(rx.active) rxFail("swing incomplete — "+(rx.pkts-rx.seen.size)+" packets lost"); },2500);
     return;
   }
-  if(rx.active){
-    rx.bytes.set(b.subarray(0,Math.min(b.length,rx.need-rx.got)),rx.got);
-    rx.got+=b.length;
-    if(rx.got>=rx.need){ rx.active=false; decodeSwing(); }
+  if(rx.active && b.length>2){
+    const seq=b[0]|(b[1]<<8), off=seq*120, payload=b.subarray(2);
+    if(off>=0 && off+payload.length<=rx.need){ rx.bytes.set(payload,off); rx.seen.add(seq); }
+    if(rx.seen.size>=rx.pkts){
+      rx.active=false; if(rxTimer){clearTimeout(rxTimer);rxTimer=null;}
+      decodeSwing();
+    }
   }
 }
 function decodeSwing(){
@@ -193,7 +207,28 @@ function rebuildRef(){
   refNormal=unit(scl(acc,1/(W||1)));
   refG0=unit(scl(ga,1/pool.length));
 }
-async function rearm(){ try{ await ctrlChar.writeValue(Uint8Array.of(1)); setStat("armed — swing away",true);}catch(e){} }
+async function rearm(quiet){ try{ await ctrlChar.writeValue(Uint8Array.of(1)); if(!quiet) setStat("armed — swing away",true);}catch(e){} }
+
+// ---- auto re-arm: it sets itself between swings, no button needed ----
+const READY_DELAY=4;              // seconds after a swing before it arms itself
+let armTimer=null, armLeft=0;
+function cancelAutoArm(){ if(armTimer){ clearInterval(armTimer); armTimer=null; } }
+function autoArm(delay){
+  cancelAutoArm();
+  if(!isConn) return;
+  armLeft = (delay===undefined) ? READY_DELAY : delay;
+  const tick=()=>{
+    if(armLeft<=0){ cancelAutoArm(); rearm(true);
+      setStat("ready — swing away",true); $("hint").textContent="ready — swing away"; return; }
+    $("hint").textContent="ready in "+armLeft+"…";
+    armLeft--;
+  };
+  tick();
+  armTimer=setInterval(tick,1000);
+}
+// Watchdog: if a swing's header packet is lost the app never sees the swing and the
+// device stays disarmed forever ("stuck"). A quiet periodic re-arm recovers it.
+setInterval(()=>{ if(isConn && !rx.active && !armTimer) rearm(true); }, 15000);
 function refreshUI(){
   const build=mode==='build', swing=pendingNref!==null;
   $("connect").style.display = isConn?'none':'';
@@ -214,7 +249,7 @@ $("keep").onclick=()=>{ if(pendingNref){ pool.push(pendingNref); rebuildRef(); p
   if(pool.length>=REF_TARGET) mode='score'; rearm(); refreshUI(); } };
 $("redo").onclick=()=>{ pendingNref=null; rearm(); refreshUI(); };
 $("lockref").onclick=()=>{ if(pool.length>=2){ mode='score'; refreshUI(); } };
-$("newref").onclick=()=>{ pool=[]; refNormal=null; refG0=null; mode='build'; pendingNref=null; rearm(); refreshUI(); };
+$("newref").onclick=()=>{ cancelAutoArm(); pool=[]; refNormal=null; refG0=null; mode='build'; pendingNref=null; rearm(); refreshUI(); };
 
 $("connect").onclick=async()=>{
   if(!navigator.bluetooth){ alert("This browser has no Web Bluetooth. Use Chrome on Android."); return; }
@@ -233,7 +268,7 @@ $("connect").onclick=async()=>{
     refreshUI();
   }catch(err){ setStat("connect failed"); console.error(err); }
 };
-$("rearm").onclick=rearm;
+$("rearm").onclick=()=>{ cancelAutoArm(); rearm(); };
 
 /* ==================== math helpers ==================== */
 const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
@@ -450,6 +485,8 @@ function analyze(gyro,accel,hz){
   $("hint").textContent = building
     ? "keep your good swings — the plane is their average"
     : "disc = your averaged plane · drag to rotate";
+  // In practice mode it re-arms itself; in build mode Keep/Redo does it on tap.
+  if(!building) autoArm();
   refreshUI();
 }
 
