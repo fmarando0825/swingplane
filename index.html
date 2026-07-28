@@ -206,7 +206,10 @@ $("connect").onclick=async()=>{
   if(!navigator.bluetooth){ alert("This browser has no Web Bluetooth. Use Chrome on Android."); return; }
   try{
     setStat("scanning…");
-    device=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
+    device=await navigator.bluetooth.requestDevice({
+      filters:[{services:[SVC]},{namePrefix:"SwingPlane"}],
+      optionalServices:[SVC]
+    });
     device.addEventListener('gattserverdisconnected',()=>{ isConn=false; setStat("disconnected"); refreshUI(); });
     const gatt=await device.gatt.connect();
     const svc=await gatt.getPrimaryService(SVC);
@@ -414,6 +417,7 @@ function initGL(){
   const cv=$("gl");
   renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.localClippingEnabled=true;
   scene=new THREE.Scene();
   cam=new THREE.PerspectiveCamera(42,1,0.01,100); cam.position.set(2.6,1.4,2.6);
   controls=new THREE.OrbitControls(cam,cv); controls.enableDamping=true; controls.enablePan=false;
@@ -453,13 +457,15 @@ function drawSwing(){
   grp.add(arcObj);
 
   // fitted downswing plane as a translucent disc through the origin
+  // (clipped at ground level so it doesn't render as poking through the grid/turf)
+  const groundClip=[new THREE.Plane(new THREE.Vector3(0,1,0),0)];
   const nrm=new THREE.Vector3(mirror*normal[0],normal[1],normal[2]).normalize();
   const disc=new THREE.Mesh(new THREE.CircleGeometry(R*1.05,48),
-    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.10,side:THREE.DoubleSide}));
+    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.10,side:THREE.DoubleSide,clippingPlanes:groundClip}));
   disc.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),nrm);
   planeObj=new THREE.Group(); planeObj.add(disc);
   const ring=new THREE.Mesh(new THREE.RingGeometry(R*1.03,R*1.05,48),
-    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.4,side:THREE.DoubleSide}));
+    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.4,side:THREE.DoubleSide,clippingPlanes:groundClip}));
   ring.quaternion.copy(disc.quaternion); planeObj.add(ring);
   grp.add(planeObj);
 
