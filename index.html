@@ -522,6 +522,38 @@ function quatAlign(from,to){ // shortest-arc quaternion rotating `from` onto `to
 
 /* ==================== three.js scene ==================== */
 let renderer,scene,cam,controls,arcObj,planeObj,grp;
+let golfer=null, clubObj=null, headObj=null, dispArc=[], animT=0;
+
+// Stick-figure golfer, hands at the hub. bodyDir = horizontal side the plane rises toward,
+// which is where a golfer actually stands (the plane climbs over the trail shoulder).
+function buildGolfer(bodyDir){
+  if(golfer){ scene.remove(golfer); golfer=null; }
+  golfer=new THREE.Group();
+  const M=new THREE.LineBasicMaterial({color:0x7E9488,transparent:true,opacity:0.85});
+  const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+  const seg=(a,b)=>golfer.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a,b]),M));
+
+  const f=bodyDir.clone().multiplyScalar(-1);                    // faces the ball
+  const s=new THREE.Vector3(0,1,0).cross(f).normalize();         // along the target line
+  const B=bodyDir.clone().multiplyScalar(0.60);                  // stand back from the hub axis
+  const P=(fwd,up,side)=>V(B.x+f.x*fwd+s.x*side, up, B.z+f.z*fwd+s.z*side);
+
+  const HANDS=V(0,1.4,0);                                        // = the hub
+  const hipL=P(-0.05,1.15,-0.19), hipR=P(-0.05,1.15,0.19);
+  const shL =P( 0.12,1.72,-0.21), shR =P( 0.12,1.72,0.21);
+  const hipC=P(-0.05,1.15,0),     shC =P( 0.12,1.72,0);
+
+  seg(hipC,shC);                                                 // spine, tilted over the ball
+  seg(hipL,hipR); seg(shL,shR);                                  // hips + shoulders
+  seg(hipL,P(-0.12,0,-0.23)); seg(hipR,P(-0.12,0,0.23));         // legs to the floor
+  seg(shL,HANDS); seg(shR,HANDS);                                // arms converge on the hands
+
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.135,20,14),
+    new THREE.MeshBasicMaterial({color:0x7E9488,transparent:true,opacity:0.55}));
+  head.position.copy(P(0.17,1.95,0)); golfer.add(head);
+  scene.add(golfer);
+}
+
 function initGL(){
   const cv=$("gl");
   renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
@@ -538,7 +570,24 @@ function initGL(){
   grp=new THREE.Group(); grp.position.y=1.4; scene.add(grp);   // = arc radius, so the
   // clubhead's lowest point lands exactly on the floor at the centre of the grid
   resize(); window.addEventListener('resize',resize);
-  (function loop(){requestAnimationFrame(loop); controls.update(); renderer.render(scene,cam);})();
+  let prev=performance.now();
+  (function loop(now){requestAnimationFrame(loop);
+    const dt=Math.min(0.05,((now||prev)-prev)/1000); prev=now||prev;
+    stepClub(dt); controls.update(); renderer.render(scene,cam);})();
+}
+
+// sweep the club along the captured arc, then pause and replay
+function stepClub(dt){
+  if(!clubObj||!dispArc.length) return;
+  animT+=dt;
+  const PLAY=2.2, HOLD=0.8;                       // seconds to sweep, then hold at impact
+  if(animT>PLAY+HOLD) animT=0;
+  const t=Math.min(1,animT/PLAY);
+  const i=Math.min(dispArc.length-1,Math.floor(t*(dispArc.length-1)));
+  const p=dispArc[i];
+  clubObj.geometry.setFromPoints([new THREE.Vector3(0,0,0),p]);
+  clubObj.geometry.attributes.position.needsUpdate=true;
+  headObj.position.copy(p);
 }
 function resize(){ const s=$("stage").getBoundingClientRect(); renderer.setSize(s.width,s.height,false); cam.aspect=s.width/s.height; cam.updateProjectionMatrix(); }
 
@@ -565,6 +614,10 @@ function drawSwing(){
   arcObj=new THREE.Line(g,new THREE.LineBasicMaterial({vertexColors:true,linewidth:2}));
   grp.add(arcObj);
 
+  // keep the arc in display coords so the club can sweep along it
+  dispArc=[];
+  for(let i=0;i<pos.length;i+=3) dispArc.push(new THREE.Vector3(pos[i],pos[i+1],pos[i+2]));
+
   // fitted downswing plane as a translucent disc through the origin
   const nrm=new THREE.Vector3(mirror*normal[0],normal[1],normal[2]).normalize();
   const disc=new THREE.Mesh(new THREE.CircleGeometry(R*1.05,48),
@@ -575,6 +628,24 @@ function drawSwing(){
     new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.6,side:THREE.DoubleSide}));
   ring.quaternion.copy(disc.quaternion); planeObj.add(ring);
   grp.add(planeObj);
+
+  // --- golfer + swinging club ---
+  // The plane's steepest up-direction points to the side it climbs; that's where the
+  // golfer stands (the plane rises over the trail shoulder).
+  const up=new THREE.Vector3(0,1,0);
+  const hi=up.clone().sub(nrm.clone().multiplyScalar(up.dot(nrm)));
+  let bodyDir=new THREE.Vector3(hi.x,0,hi.z);
+  if(bodyDir.lengthSq()<1e-6) bodyDir.set(1,0,0);
+  buildGolfer(bodyDir.normalize());
+
+  if(clubObj){grp.remove(clubObj);} if(headObj){grp.remove(headObj);}
+  clubObj=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),dispArc[0]||new THREE.Vector3(0,-R,0)]),
+                         new THREE.LineBasicMaterial({color:0xE8F0EA}));
+  grp.add(clubObj);
+  headObj=new THREE.Mesh(new THREE.SphereGeometry(0.055,14,10),
+                         new THREE.MeshBasicMaterial({color:0xE8F0EA}));
+  headObj.position.copy(dispArc[0]||new THREE.Vector3(0,-R,0)); grp.add(headObj);
+  animT=0;
 
   setView();
 }
