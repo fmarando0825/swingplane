@@ -366,10 +366,22 @@ function analyze(gyro,accel,hz){
   const Nworld = unit(applyR(Nplane));
   let q=[1,0,0,0];
   const arc=[]; const devArc=[];
+  const SATA=33;   // ±2000 dps rail (rad/s) — don't integrate clipped samples
   for(let i=0;i<n;i++){
     const w=sub(gyro[i],bias), wm=norm(w);
-    if(wm>1e-6){ const dq=quatFromAxisAngle(scl(w,1/wm), wm*dt); q=qmul(q,dq); }
-    if(i>=s0 && i<=iMax){ arc.push(applyR(rotVec(q, shaftAxis))); devArc.push(devSmooth[i-s0]); }
+    const clipped = Math.abs(gyro[i][0])>SATA||Math.abs(gyro[i][1])>SATA||Math.abs(gyro[i][2])>SATA;
+    if(wm>1e-6 && !clipped){ const dq=quatFromAxisAngle(scl(w,1/wm), wm*dt); q=qmul(q,dq); }
+    if(i>=s0 && i<=iMax){
+      const raw = applyR(rotVec(q, shaftAxis));
+      // keep the integrated sweep for the SHAPE, but force the off-plane angle to the
+      // MEASURED deviation (same trusted number as the score) — so on-plane = in the disc
+      const d = devSmooth[i-s0]*Math.PI/180;
+      let pin = sub(raw, scl(Nworld, dot(raw,Nworld)));
+      pin = (norm(pin)>1e-4) ? unit(pin) : unit(cross(Nworld,[0,1,0]));
+      const sgn = dot(raw,Nworld)>=0 ? 1 : -1;
+      arc.push(add(scl(pin, Math.cos(d)), scl(Nworld, sgn*Math.sin(d))));
+      devArc.push(devSmooth[i-s0]);
+    }
   }
   lastArc={arc,devArc,normal:Nworld,topIdx:dTop,hz};
   drawSwing();
