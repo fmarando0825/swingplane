@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1512">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>SwingPlane</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1512; --panel:#16201B; --panel2:#1B2721; --hair:#2A3830;
+    --ink:#E8F0EA; --mut:#7E9488;
+    --on:#5FD08A; --drift:#E8B04B; --off:#E5654B; --accent:#5FD08A;
+    --disp:"Space Grotesk",system-ui,sans-serif; --body:"Inter",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; height:100%}
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--body);
+    display:flex; flex-direction:column; min-height:100dvh;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 18px 12px; border-bottom:1px solid var(--hair);
+  }
+  .brand{font-family:var(--disp); font-weight:700; letter-spacing:.14em; font-size:15px}
+  .brand small{color:var(--mut); font-weight:500; letter-spacing:.2em; font-size:10px; display:block; margin-top:2px}
+  .status{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--mut)}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--off); box-shadow:0 0 0 0 rgba(95,208,138,.5)}
+  .dot.live{background:var(--on); animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(95,208,138,.4)}70%{box-shadow:0 0 0 7px rgba(95,208,138,0)}100%{box-shadow:0 0 0 0 rgba(95,208,138,0)}}
+
+  #stage{position:relative; flex:1 1 auto; min-height:44dvh}
+  #gl{position:absolute; inset:0; width:100%; height:100%; display:block}
+  .hint{
+    position:absolute; left:0; right:0; bottom:12px; text-align:center;
+    color:var(--mut); font-size:12px; letter-spacing:.03em; pointer-events:none;
+  }
+
+  .readouts{padding:14px 16px 6px; border-top:1px solid var(--hair)}
+  .hero{display:flex; align-items:baseline; gap:14px; margin-bottom:14px}
+  .hero .score{font-family:var(--disp); font-weight:700; font-size:64px; line-height:.9; font-variant-numeric:tabular-nums}
+  .hero .label{color:var(--mut); font-size:12px; letter-spacing:.16em; text-transform:uppercase}
+  .hero .verdict{margin-left:auto; text-align:right; font-family:var(--disp); font-weight:500; font-size:15px}
+
+  #strip{width:100%; height:18px; border-radius:6px; display:block; margin:2px 0 4px; border:1px solid var(--hair)}
+  .striplbl{display:flex; justify-content:space-between; color:var(--mut); font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:14px}
+  .refbar{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px 0; font-size:13px; color:var(--ink)}
+  .refbar #reftext{font-family:var(--disp); font-weight:500}
+  .mini{flex:0 0 auto; font-size:12px; padding:7px 12px; border-radius:8px}
+  .grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
+  .cell{background:var(--panel); border:1px solid var(--hair); border-radius:12px; padding:11px 12px}
+  .cell .k{color:var(--mut); font-size:10px; letter-spacing:.12em; text-transform:uppercase}
+  .cell .v{font-family:var(--disp); font-weight:500; font-size:21px; margin-top:5px; font-variant-numeric:tabular-nums}
+  .cell .v small{font-size:12px; color:var(--mut); font-weight:400; margin-left:3px}
+
+  .bar{display:flex; gap:10px; padding:14px 16px calc(16px + env(safe-area-inset-bottom))}
+  button{
+    flex:1; font-family:var(--disp); font-weight:500; font-size:15px; letter-spacing:.02em;
+    color:var(--bg); background:var(--accent); border:0; border-radius:12px; padding:15px;
+    transition:filter .15s, opacity .15s;
+  }
+  button.ghost{background:transparent; color:var(--ink); border:1px solid var(--hair)}
+  button:active{filter:brightness(1.08)}
+  button:disabled{opacity:.4}
+
+  .toggle{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--mut); padding:0 16px 4px}
+  .toggle b{color:var(--ink); font-weight:600}
+  .seg{display:inline-flex; border:1px solid var(--hair); border-radius:8px; overflow:hidden}
+  .seg span{padding:5px 12px; cursor:pointer}
+  .seg span.sel{background:var(--panel2); color:var(--ink)}
+
+  .empty{color:var(--mut); font-size:13px; text-align:center; line-height:1.5; max-width:280px; margin:0 auto}
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">SWINGPLANE<small>rotation-axis analyzer</small></div>
+    <div class="status"><span id="dot" class="dot"></span><span id="stat">not connected</span></div>
+  </header>
+
+  <div id="stage">
+    <canvas id="gl"></canvas>
+    <div class="hint" id="hint">connect, then take a swing</div>
+  </div>
+
+  <div class="toggle">
+    handedness&nbsp;
+    <span class="seg" id="hand"><span data-h="L" class="sel">Left</span><span data-h="R">Right</span></span>
+    &nbsp;&nbsp;view&nbsp;
+    <span class="seg" id="view"><span data-v="down" class="sel">Down-line</span><span data-v="face">Face-on</span></span>
+  </div>
+
+  <div class="refbar" id="refchip" style="display:none">
+    <span id="reftext"></span>
+    <button id="lockref" class="mini" style="display:none">Lock now</button>
+  </div>
+
+  <div class="readouts" id="readouts" style="display:none">
+    <div class="hero">
+      <div class="score" id="score">--</div>
+      <div class="label" id="scorelbl">held on<br>plane</div>
+      <div class="verdict" id="verdict"></div>
+    </div>
+    <canvas id="strip" height="18"></canvas>
+    <div class="striplbl"><span>top of swing</span><span>impact</span></div>
+    <div class="grid">
+      <div class="cell"><div class="k">Left plane at</div><div class="v" id="leftAt">--</div></div>
+      <div class="cell"><div class="k">Max drift</div><div class="v" id="maxDrift">--<small>°</small></div></div>
+      <div class="cell"><div class="k">Your plane</div><div class="v" id="refAngle">--<small>°</small></div></div>
+    </div>
+  </div>
+
+  <div class="readouts" id="welcome">
+    <p class="empty">Clip the sensor below the grip, flash the ESP32-S3, then tap Connect.
+    Take a normal swing — the arc and your on-plane score appear here.</p>
+  </div>
+
+  <div class="bar">
+    <button id="connect">Connect</button>
+    <button id="keep" style="display:none">Keep sample</button>
+    <button id="redo" class="ghost" style="display:none">Redo</button>
+    <button id="newref" class="ghost" style="display:none">New reference</button>
+    <button id="rearm" class="ghost" style="display:none">Re-arm</button>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/* ============================ BLE ============================ */
+const SVC="b1a70000-5c2f-4b21-9c9e-1f0e2a5d7c10";
+const DATA="b1a70001-5c2f-4b21-9c9e-1f0e2a5d7c10";
+const CTRL="b1a70002-5c2f-4b21-9c9e-1f0e2a5d7c10";
+
+let ctrlChar=null, device=null;
+const $=id=>document.getElementById(id);
+function setStat(t,live){ $("stat").textContent=t; $("dot").classList.toggle("live",!!live); }
+
+// incoming-packet reassembly
+let rx={active:false,need:0,got:0,gs:400,as:100,hz:500,bytes:null};
+function onPacket(dv){
+  const b=new Uint8Array(dv.buffer);
+  if(!rx.active && b.length>=14 && b[0]===0xA5 && b[1]===0x5A){
+    const count=b[2]|(b[3]<<8); rx.hz=b[4]|(b[5]<<8);
+    rx.gs=dv.getFloat32(6,true); rx.as=dv.getFloat32(10,true);
+    rx.need=count*12; rx.got=0; rx.bytes=new Uint8Array(rx.need); rx.active=true;
+    $("hint").textContent="reading swing…";
+    return;
+  }
+  if(rx.active){
+    rx.bytes.set(b.subarray(0,Math.min(b.length,rx.need-rx.got)),rx.got);
+    rx.got+=b.length;
+    if(rx.got>=rx.need){ rx.active=false; decodeSwing(); }
+  }
+}
+function decodeSwing(){
+  const n=Math.floor(rx.need/12), dv=new DataView(rx.bytes.buffer);
+  const gyro=[],accel=[];
+  for(let i=0;i<n;i++){
+    const o=i*12;
+    gyro.push([dv.getInt16(o,true)/rx.gs, dv.getInt16(o+2,true)/rx.gs, dv.getInt16(o+4,true)/rx.gs]);   // rad/s
+    accel.push([dv.getInt16(o+6,true)/rx.as, dv.getInt16(o+8,true)/rx.as, dv.getInt16(o+10,true)/rx.as]); // m/s^2
+  }
+  analyze(gyro,accel,rx.hz);
+}
+
+// ---- reference-swing pool (average a few good swings into one plane) ----
+let mode='build', pool=[], refNormal=null, isConn=false, pendingNref=null;
+const REF_TARGET=3;
+
+function rebuildRef(){
+  if(!pool.length){ refNormal=null; return; }
+  const anchor=pool[0].normal; let acc=[0,0,0], W=0;
+  for(const p of pool){ const nn=dot(p.normal,anchor)<0?scl(p.normal,-1):p.normal; acc=add(acc,scl(nn,p.w)); W+=p.w; }
+  refNormal=unit(scl(acc,1/(W||1)));
+}
+async function rearm(){ try{ await ctrlChar.writeValue(Uint8Array.of(1)); setStat("armed — swing away",true);}catch(e){} }
+function refreshUI(){
+  const build=mode==='build', swing=pendingNref!==null;
+  $("connect").style.display = isConn?'none':'';
+  $("keep").style.display    = (isConn&&build&&swing)?'':'none';
+  $("redo").style.display    = (isConn&&build&&swing)?'':'none';
+  $("newref").style.display  = (isConn&&!build)?'':'none';
+  $("rearm").style.display   = (isConn&&!build)?'':'none';
+  $("refchip").style.display = isConn?'':'none';
+  if(build){
+    $("reftext").textContent = `Building your plane — ${pool.length} of ${REF_TARGET} swings kept`;
+    $("lockref").style.display = (pool.length>=2 && pool.length<REF_TARGET)?'':'none';
+  } else {
+    $("reftext").textContent = `Plane locked · averaged from ${pool.length} swings`;
+    $("lockref").style.display='none';
+  }
+}
+$("keep").onclick=()=>{ if(pendingNref){ pool.push(pendingNref); rebuildRef(); pendingNref=null;
+  if(pool.length>=REF_TARGET) mode='score'; rearm(); refreshUI(); } };
+$("redo").onclick=()=>{ pendingNref=null; rearm(); refreshUI(); };
+$("lockref").onclick=()=>{ if(pool.length>=2){ mode='score'; refreshUI(); } };
+$("newref").onclick=()=>{ pool=[]; refNormal=null; mode='build'; pendingNref=null; rearm(); refreshUI(); };
+
+$("connect").onclick=async()=>{
+  if(!navigator.bluetooth){ alert("This browser has no Web Bluetooth. Use Chrome on Android."); return; }
+  try{
+    setStat("scanning…");
+    device=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
+    device.addEventListener('gattserverdisconnected',()=>{ isConn=false; setStat("disconnected"); refreshUI(); });
+    const gatt=await device.gatt.connect();
+    const svc=await gatt.getPrimaryService(SVC);
+    const data=await svc.getCharacteristic(DATA);
+    ctrlChar=await svc.getCharacteristic(CTRL);
+    await data.startNotifications();
+    data.addEventListener('characteristicvaluechanged',e=>onPacket(e.target.value));
+    isConn=true; setStat("connected — swing away",true);
+    $("hint").textContent="take a few good swings to set your plane";
+    refreshUI();
+  }catch(err){ setStat("connect failed"); console.error(err); }
+};
+$("rearm").onclick=rearm;
+
+/* ==================== math helpers ==================== */
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+const scl=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const norm=a=>Math.hypot(a[0],a[1],a[2]);
+const unit=a=>{const n=norm(a)||1;return[a[0]/n,a[1]/n,a[2]/n];};
+
+// Jacobi eigen-decomposition of a symmetric 3x3 -> {vec:[3x[3]], val:[3]} ascending
+function eigSym3(A){
+  let a=[[A[0][0],A[0][1],A[0][2]],[A[1][0],A[1][1],A[1][2]],[A[2][0],A[2][1],A[2][2]]];
+  let V=[[1,0,0],[0,1,0],[0,0,1]];
+  for(let sweep=0;sweep<24;sweep++){
+    let off=Math.abs(a[0][1])+Math.abs(a[0][2])+Math.abs(a[1][2]);
+    if(off<1e-12)break;
+    for(const [p,q] of [[0,1],[0,2],[1,2]]){
+      if(Math.abs(a[p][q])<1e-14)continue;
+      const th=(a[q][q]-a[p][p])/(2*a[p][q]);
+      const t=Math.sign(th)/(Math.abs(th)+Math.sqrt(th*th+1));
+      const c=1/Math.sqrt(t*t+1), s=t*c;
+      for(let k=0;k<3;k++){
+        const akp=a[k][p], akq=a[k][q];
+        a[k][p]=c*akp-s*akq; a[k][q]=s*akp+c*akq;
+      }
+      for(let k=0;k<3;k++){
+        const apk=a[p][k], aqk=a[q][k];
+        a[p][k]=c*apk-s*aqk; a[q][k]=s*apk+c*aqk;
+      }
+      for(let k=0;k<3;k++){
+        const vkp=V[k][p], vkq=V[k][q];
+        V[k][p]=c*vkp-s*vkq; V[k][q]=s*vkp+c*vkq;
+      }
+    }
+  }
+  const val=[a[0][0],a[1][1],a[2][2]];
+  const idx=[0,1,2].sort((i,j)=>val[i]-val[j]);
+  return {val:idx.map(i=>val[i]), vec:idx.map(i=>[V[0][i],V[1][i],V[2][i]])};
+}
+
+// weighted principal axis of a set of vectors (largest eigenvector of sum w u uT)
+function principalAxis(vecs,weights){
+  const M=[[0,0,0],[0,0,0],[0,0,0]]; let W=0;
+  for(let i=0;i<vecs.length;i++){
+    const u=vecs[i], w=weights[i]; W+=w;
+    for(let r=0;r<3;r++)for(let c=0;c<3;c++)M[r][c]+=w*u[r]*u[c];
+  }
+  if(W>0)for(let r=0;r<3;r++)for(let c=0;c<3;c++)M[r][c]/=W;
+  const e=eigSym3(M);
+  return e.vec[2]; // largest eigenvalue
+}
+
+/* ==================== swing analysis ==================== */
+let lastArc=null; // for viz
+
+const K_SCORE=16;      // deg of drift that = a zero score (tune to your baseline)
+const OFF_THRESH=7;    // deg off your plane that counts as "left it"
+
+function analyze(gyro,accel,hz){
+  const n=gyro.length, dt=1/hz, floor=0.3; // rad/s floor for a trustworthy axis
+  const gmag=gyro.map(g=>norm(g)*57.2958); // deg/s
+
+  // smooth |gyro|; impact ≈ global max, top-of-swing ≈ min between takeaway hump and impact
+  const sm=gmag.map((_,i)=>{let s=0,c=0;for(let k=-4;k<=4;k++){const j=i+k;if(j>=0&&j<n){s+=gmag[j];c++;}}return s/c;});
+  let iMax=0; for(let i=0;i<n;i++) if(sm[i]>sm[iMax]) iMax=i;
+  let tTop=Math.floor(iMax*0.4), lo=1e9;
+  for(let i=Math.floor(iMax*0.15);i<iMax;i++){ if(sm[i]<lo){lo=sm[i];tTop=i;} }
+  const s0=8;                                   // skip settling samples
+
+  // gravity at address -> "up" in sensor frame (for plane-tilt readout + viz)
+  let g0=[0,0,0]; const N0=Math.min(20,tTop);
+  for(let i=0;i<N0;i++) g0=add(g0,accel[i]);
+  g0=unit(scl(g0,1/N0));
+
+  // --- this swing's own takeaway plane (the candidate / reference building block) ---
+  let refEnd = s0 + Math.round(0.45*(tTop-s0));  // first ~45% of the backswing
+  function axisIn(a,b){
+    const V=[],W=[];
+    for(let i=a;i<b;i++){ const m=norm(gyro[i]); if(m<floor)continue; V.push(scl(gyro[i],1/m)); W.push(m); }
+    if(V.length<5)return null;
+    let ax=unit(principalAxis(V,W));
+    let s=0; for(let i=0;i<V.length;i++) s+=Math.sign(dot(V[i],ax))*W[i];
+    return s<0?scl(ax,-1):ax;
+  }
+  const Nself = axisIn(s0,refEnd) || axisIn(s0,tTop);
+  if(!Nself){ $("hint").textContent="couldn't read that swing — try again"; return; }
+
+  // takeaway tightness -> weight when averaging (a steadier takeaway earns more trust)
+  let tse=0,tsw=0;
+  for(let i=s0;i<refEnd;i++){ const m=norm(gyro[i]); if(m<floor)continue;
+    const a=Math.acos(Math.min(1,Math.abs(dot(scl(gyro[i],1/m),Nself))))*57.2958; tse+=a*a; tsw++; }
+  const weight=1/(tse/(tsw||1)+1);
+
+  // grade against the AVERAGED reference once locked; otherwise against this swing itself
+  const Nplane = (mode==='score' && refNormal) ? refNormal : Nself;
+
+  // --- per-sample deviation from the plane, takeaway through impact (sign-agnostic) ---
+  // SAT guards a ±2000 dps sensor (MPU-6050): ~34.9 rad/s is the rail — hold through clipped samples
+  const dev=[]; let prev=0; const SAT=33;
+  for(let i=s0;i<=iMax;i++){
+    const g=gyro[i], m=norm(g);
+    const clipped = Math.abs(g[0])>SAT||Math.abs(g[1])>SAT||Math.abs(g[2])>SAT;
+    let d = (m<floor||clipped) ? prev : Math.acos(Math.min(1,Math.abs(dot(scl(g,1/m),Nplane))))*57.2958;
+    prev=d; dev.push(d);
+  }
+  const devSmooth=dev.map((_,i)=>{let s=0,c=0;for(let k=-2;k<=2;k++){const j=i+k;if(j>=0&&j<dev.length){s+=dev[j];c++;}}return s/c;});
+
+  // downswing slice (top -> impact) is what we score & strip
+  const dTop=tTop-s0, dImp=iMax-s0;
+  let se=0,sw=0,maxDrift=0,leftAt=-1;
+  for(let i=dTop;i<=dImp;i++){
+    const w=norm(gyro[i+s0]); const d=devSmooth[i];
+    se+=w*d*d; sw+=w>0?w:0;
+    if(d>maxDrift)maxDrift=d;
+    if(leftAt<0 && d>OFF_THRESH) leftAt=(i-dTop)/(dImp-dTop);
+  }
+  const rms=Math.sqrt(se/(sw||1));
+  const score=Math.max(0,Math.min(100,Math.round(100*(1-rms/K_SCORE))));
+  const refTilt=Math.abs(90-Math.acos(Math.min(1,Math.abs(dot(Nplane,g0))))*57.2958);
+
+  // stash this swing so "Keep sample" can fold its plane into the average (build mode only)
+  pendingNref = (mode==='build') ? {normal:Nself, w:weight} : null;
+
+  // --- reconstruct shaft arc for the picture; color by deviation from the plane ---
+  let q=quatAlign(g0,[0,1,0]);
+  const SHAFT=[1,0,0];                      // sensor +X assumed down the shaft
+  const arc=[]; const devArc=[];
+  const Nworld=rotVec(q,Nplane);
+  for(let i=0;i<n;i++){
+    const w=gyro[i], wm=norm(w);
+    if(wm>1e-6){ const dq=quatFromAxisAngle(scl(w,1/wm),wm*dt); q=qmul(q,dq); }
+    if(i>=s0&&i<=iMax){ arc.push(rotVec(q,SHAFT)); devArc.push(devSmooth[i-s0]); }
+  }
+  lastArc={arc,devArc,normal:Nworld,topIdx:dTop,hz};
+  drawSwing();
+  paintStrip(devSmooth.slice(dTop,dImp+1));
+
+  // --- UI ---
+  $("welcome").style.display="none"; $("readouts").style.display="block";
+  const col = score>=80?"var(--on)":score>=60?"var(--drift)":"var(--off)";
+  const building = mode==='build';
+  $("score").textContent=score; $("score").style.color=col;
+  $("scorelbl").innerHTML = building ? 'sample<br>quality' : 'held on<br>plane';
+  $("verdict").textContent = building
+    ? (score>=80?"clean sample":score>=60?"a little loose":"loose — maybe redo")
+    : (score>=80?"stayed on plane":score>=60?"drifted off":"came off plane");
+  $("verdict").style.color=col;
+  $("leftAt").innerHTML = leftAt<0 ? 'stayed on<small> ✓</small>' : Math.round(leftAt*100)+'<small>% down</small>';
+  $("leftAt").style.color = leftAt<0 ? 'var(--on)' : 'var(--ink)';
+  $("maxDrift").innerHTML=maxDrift.toFixed(0)+'<small>°</small>';
+  $("refAngle").innerHTML=refTilt.toFixed(0)+'<small>° steep</small>';
+  $("hint").textContent = building
+    ? "keep your good swings — the plane is their average"
+    : "disc = your averaged plane · drag to rotate";
+  refreshUI();
+}
+
+// paint the top-of-swing -> impact deviation strip
+function paintStrip(d){
+  const cv=$("strip"); const w=cv.clientWidth||cv.width, h=18;
+  cv.width=w*devicePixelRatio; cv.height=h*devicePixelRatio;
+  const ctx=cv.getContext('2d'); ctx.scale(devicePixelRatio,devicePixelRatio);
+  const col=v=>{ const t=Math.min(1,v/OFF_THRESH); return t<0.5
+    ? `rgb(${lerp(95,232,t*2)},${lerp(208,176,t*2)},${lerp(138,75,t*2)})`
+    : `rgb(${lerp(232,229,(t-.5)*2)},${lerp(176,101,(t-.5)*2)},${lerp(75,75,(t-.5)*2)})`; };
+  for(let x=0;x<w;x++){ const i=Math.min(d.length-1,Math.floor(x/w*d.length)); ctx.fillStyle=col(d[i]||0); ctx.fillRect(x,0,1,h); }
+}
+const lerp=(a,b,t)=>Math.round(a+(b-a)*Math.max(0,Math.min(1,t)));
+
+/* ---- tiny quaternion kit (w,x,y,z) ---- */
+function quatFromAxisAngle(ax,ang){const h=ang/2,s=Math.sin(h);return[Math.cos(h),ax[0]*s,ax[1]*s,ax[2]*s];}
+function qmul(a,b){return[
+  a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3],
+  a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],
+  a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1],
+  a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]];}
+function rotVec(q,v){
+  const [w,x,y,z]=q; const t=[2*(y*v[2]-z*v[1]),2*(z*v[0]-x*v[2]),2*(x*v[1]-y*v[0])];
+  return[v[0]+w*t[0]+(y*t[2]-z*t[1]), v[1]+w*t[1]+(z*t[0]-x*t[2]), v[2]+w*t[2]+(x*t[1]-y*t[0])];
+}
+function quatAlign(from,to){ // shortest-arc quaternion rotating `from` onto `to`
+  from=unit(from); to=unit(to); const d=dot(from,to);
+  if(d>0.9999)return[1,0,0,0];
+  if(d<-0.9999){ let ax=cross([1,0,0],from); if(norm(ax)<1e-4)ax=cross([0,1,0],from); ax=unit(ax); return[0,ax[0],ax[1],ax[2]]; }
+  const ax=cross(from,to); const w=1+d; const q=[w,ax[0],ax[1],ax[2]]; const nq=Math.hypot(...q); return q.map(v=>v/nq);
+}
+
+/* ==================== three.js scene ==================== */
+let renderer,scene,cam,controls,arcObj,planeObj,grp;
+function initGL(){
+  const cv=$("gl");
+  renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  scene=new THREE.Scene();
+  cam=new THREE.PerspectiveCamera(42,1,0.01,100); cam.position.set(2.6,1.4,2.6);
+  controls=new THREE.OrbitControls(cam,cv); controls.enableDamping=true; controls.enablePan=false;
+  scene.add(new THREE.AmbientLight(0xffffff,0.9));
+  const grid=new THREE.GridHelper(4,16,0x2A3830,0x1B2721); scene.add(grid);
+  // vertical reference post at the "ball"
+  const post=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,1.6,0)]),
+                            new THREE.LineBasicMaterial({color:0x2A3830}));
+  scene.add(post);
+  grp=new THREE.Group(); scene.add(grp);
+  resize(); window.addEventListener('resize',resize);
+  (function loop(){requestAnimationFrame(loop); controls.update(); renderer.render(scene,cam);})();
+}
+function resize(){ const s=$("stage").getBoundingClientRect(); renderer.setSize(s.width,s.height,false); cam.aspect=s.width/s.height; cam.updateProjectionMatrix(); }
+
+function drawSwing(){
+  if(!lastArc)return;
+  if(arcObj)grp.remove(arcObj); if(planeObj)grp.remove(planeObj);
+  const {arc,devArc,normal}=lastArc;
+  const R=1.4; // display shaft length
+  const hand = document.querySelector('#hand .sel').dataset.h;
+  const mirror = hand==='L' ? -1 : 1;
+
+  // colored arc by degrees off YOUR reference plane
+  const pos=[],col=[];
+  const c_on=new THREE.Color(0x5FD08A),c_dr=new THREE.Color(0xE8B04B),c_of=new THREE.Color(0xE5654B);
+  for(const [i,v] of arc.entries()){
+    pos.push(mirror*v[0]*R, Math.max(0,v[1])*R+0.02, v[2]*R);
+    const d=Math.min(1,devArc[i]/OFF_THRESH); // OFF_THRESH deg = fully off
+    const c = d<0.5 ? c_on.clone().lerp(c_dr,d*2) : c_dr.clone().lerp(c_of,(d-0.5)*2);
+    col.push(c.r,c.g,c.b);
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+  arcObj=new THREE.Line(g,new THREE.LineBasicMaterial({vertexColors:true,linewidth:2}));
+  grp.add(arcObj);
+
+  // fitted downswing plane as a translucent disc through the origin
+  const nrm=new THREE.Vector3(mirror*normal[0],normal[1],normal[2]).normalize();
+  const disc=new THREE.Mesh(new THREE.CircleGeometry(R*1.05,48),
+    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.10,side:THREE.DoubleSide}));
+  disc.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),nrm);
+  planeObj=new THREE.Group(); planeObj.add(disc);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(R*1.03,R*1.05,48),
+    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.4,side:THREE.DoubleSide}));
+  ring.quaternion.copy(disc.quaternion); planeObj.add(ring);
+  grp.add(planeObj);
+
+  setView();
+}
+function setView(){
+  const v=document.querySelector('#view .sel').dataset.v;
+  if(v==='down') cam.position.set(0.2,1.2,3.2); else cam.position.set(3.2,1.2,0.2);
+  controls.target.set(0,0.7,0);
+}
+
+// segmented toggles
+document.querySelectorAll('.seg').forEach(seg=>{
+  seg.querySelectorAll('span').forEach(sp=>sp.onclick=()=>{
+    seg.querySelectorAll('span').forEach(x=>x.classList.remove('sel'));
+    sp.classList.add('sel');
+    if(seg.id==='hand') drawSwing(); else setView();
+  });
+});
+
+initGL();
+</script>
+</body>
+</html>
