@@ -206,10 +206,7 @@ $("connect").onclick=async()=>{
   if(!navigator.bluetooth){ alert("This browser has no Web Bluetooth. Use Chrome on Android."); return; }
   try{
     setStat("scanning…");
-    device=await navigator.bluetooth.requestDevice({
-      filters:[{services:[SVC]},{namePrefix:"SwingPlane"}],
-      optionalServices:[SVC]
-    });
+    device=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
     device.addEventListener('gattserverdisconnected',()=>{ isConn=false; setStat("disconnected"); refreshUI(); });
     const gatt=await device.gatt.connect();
     const svc=await gatt.getPrimaryService(SVC);
@@ -298,14 +295,9 @@ function analyze(gyro,accel,hz){
   for(let i=0;i<N0;i++) g0=add(g0,accel[i]);
   g0=unit(scl(g0,1/N0));
 
-  // --- this swing's own takeaway plane (the candidate / reference building block) ---
-  // find where real motion starts: the buffer opens with the pre-trigger ring
-  // (mostly still address/waggle), and fitting from s0 straight through would let
-  // that noise dominate the axis — so skip ahead to the first clearly-moving sample.
-  const MOVE_DPS = 60; // deg/s — comfortably above address stillness/waggle, well below a real takeaway
-  let tStart = s0;
-  for (let i = s0; i < tTop; i++){ if (sm[i] > MOVE_DPS){ tStart = i; break; } }
-  let refEnd = tStart + Math.round(0.45*(tTop-tStart));  // first ~45% of the real backswing
+  // --- this swing's own plane (candidate / reference building block) ---
+  // Derived from the DOWNSWING, where swing rotation dominates. The takeaway is
+  // too slow — face/shaft roll rivals the swing there and the axis can lock ~90° off.
   function axisIn(a,b){
     const V=[],W=[];
     for(let i=a;i<b;i++){ const m=norm(gyro[i]); if(m<floor)continue; V.push(scl(gyro[i],1/m)); W.push(m); }
@@ -314,12 +306,12 @@ function analyze(gyro,accel,hz){
     let s=0; for(let i=0;i<V.length;i++) s+=Math.sign(dot(V[i],ax))*W[i];
     return s<0?scl(ax,-1):ax;
   }
-  const Nself = axisIn(tStart,refEnd) || axisIn(tStart,tTop);
+  const Nself = axisIn(tTop,iMax) || axisIn(s0,iMax);
   if(!Nself){ $("hint").textContent="couldn't read that swing — try again"; return; }
 
-  // takeaway tightness -> weight when averaging (a steadier takeaway earns more trust)
+  // downswing tightness -> weight when averaging (a steadier swing earns more trust)
   let tse=0,tsw=0;
-  for(let i=tStart;i<refEnd;i++){ const m=norm(gyro[i]); if(m<floor)continue;
+  for(let i=tTop;i<iMax;i++){ const m=norm(gyro[i]); if(m<floor)continue;
     const a=Math.acos(Math.min(1,Math.abs(dot(scl(gyro[i],1/m),Nself))))*57.2958; tse+=a*a; tsw++; }
   const weight=1/(tse/(tsw||1)+1);
 
@@ -348,7 +340,7 @@ function analyze(gyro,accel,hz){
   }
   const rms=Math.sqrt(se/(sw||1));
   const score=Math.max(0,Math.min(100,Math.round(100*(1-rms/K_SCORE))));
-  const refTilt=Math.acos(Math.min(1,Math.abs(dot(Nplane,g0))))*57.2958;
+  const refTilt=Math.abs(90-Math.acos(Math.min(1,Math.abs(dot(Nplane,g0))))*57.2958);
 
   // stash this swing so "Keep sample" can fold its plane into the average (build mode only)
   pendingNref = (mode==='build') ? {normal:Nself, w:weight} : null;
@@ -423,7 +415,6 @@ function initGL(){
   const cv=$("gl");
   renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-  renderer.localClippingEnabled=true;
   scene=new THREE.Scene();
   cam=new THREE.PerspectiveCamera(42,1,0.01,100); cam.position.set(2.6,1.4,2.6);
   controls=new THREE.OrbitControls(cam,cv); controls.enableDamping=true; controls.enablePan=false;
@@ -451,7 +442,7 @@ function drawSwing(){
   const pos=[],col=[];
   const c_on=new THREE.Color(0x5FD08A),c_dr=new THREE.Color(0xE8B04B),c_of=new THREE.Color(0xE5654B);
   for(const [i,v] of arc.entries()){
-    pos.push(mirror*v[0]*R, Math.max(0,v[1])*R+0.02, v[2]*R);
+    pos.push(mirror*v[0]*R, v[1]*R, v[2]*R);
     const d=Math.min(1,devArc[i]/OFF_THRESH); // OFF_THRESH deg = fully off
     const c = d<0.5 ? c_on.clone().lerp(c_dr,d*2) : c_dr.clone().lerp(c_of,(d-0.5)*2);
     col.push(c.r,c.g,c.b);
@@ -463,15 +454,13 @@ function drawSwing(){
   grp.add(arcObj);
 
   // fitted downswing plane as a translucent disc through the origin
-  // (clipped at ground level so it doesn't render as poking through the grid/turf)
-  const groundClip=[new THREE.Plane(new THREE.Vector3(0,1,0),0)];
   const nrm=new THREE.Vector3(mirror*normal[0],normal[1],normal[2]).normalize();
   const disc=new THREE.Mesh(new THREE.CircleGeometry(R*1.05,48),
-    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.10,side:THREE.DoubleSide,clippingPlanes:groundClip}));
+    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.10,side:THREE.DoubleSide}));
   disc.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),nrm);
   planeObj=new THREE.Group(); planeObj.add(disc);
   const ring=new THREE.Mesh(new THREE.RingGeometry(R*1.03,R*1.05,48),
-    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.4,side:THREE.DoubleSide,clippingPlanes:groundClip}));
+    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.4,side:THREE.DoubleSide}));
   ring.quaternion.copy(disc.quaternion); planeObj.add(ring);
   grp.add(planeObj);
 
