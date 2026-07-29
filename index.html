@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0E1512">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>SwingPlane v2.3</title>
+<title>SwingPlane v2.5</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -37,7 +37,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 </head>
 <body>
 <header>
-  <div class="brand">SWINGPLANE <small>shaft-orientation consistency analyzer · v2.3</small></div>
+  <div class="brand">SWINGPLANE <small>shaft-orientation consistency analyzer · v2.5</small></div>
   <div class="status"><span id="dot" class="dot"></span><span id="stat">not connected</span></div>
 </header>
 
@@ -74,7 +74,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
   </div>
 </div>
 
-<div class="readouts" id="welcome"><p class="empty">Flash the matching v2.3 firmware, open this page in Chrome on Android over HTTPS, connect by Bluetooth, calibrate the mount, and build a reference from three solid swings.</p></div>
+<div class="readouts" id="welcome"><p class="empty">Flash the matching v2.5 firmware, open this page in Chrome on Android over HTTPS, connect by Bluetooth, calibrate the mount, and build a reference from three solid swings.</p></div>
 
 <div class="bar">
   <button id="connect">Connect</button>
@@ -287,7 +287,7 @@ $('connect').onclick = async () => {
 /* =========================== Calibration =========================== */
 let shaftAxisSensor = null; // head -> hands, fixed in sensor coordinates
 try {
-  const saved = JSON.parse(localStorage.getItem('swingplane-v2.3-shaft-axis') || 'null');
+  const saved = JSON.parse(localStorage.getItem('swingplane-v2.5-shaft-axis') || 'null');
   if (Array.isArray(saved) && saved.length === 3 && saved.every(Number.isFinite)) shaftAxisSensor = unit(saved);
 } catch (_) {}
 
@@ -312,7 +312,7 @@ $('calibrate').onclick = async () => {
     calibrationTimer = null;
     calibrationPending = false;
     setStatus('no calibration reply', false);
-    $('hint').textContent = 'flash the matching v2.3 firmware, reconnect, then retry';
+    $('hint').textContent = 'flash the matching v2.5 firmware, reconnect, then retry';
     refreshUI();
   }, 3500);
 };
@@ -337,7 +337,7 @@ function finishCalibration(version, valid, axis, gyroRms, accelStd){
   }
 
   shaftAxisSensor = unit(axis);
-  localStorage.setItem('swingplane-v2.3-shaft-axis', JSON.stringify(shaftAxisSensor));
+  localStorage.setItem('swingplane-v2.5-shaft-axis', JSON.stringify(shaftAxisSensor));
   pool = [];
   refNormal = null;
   mode = 'build';
@@ -434,7 +434,7 @@ $('rearm').onclick = () => armSwing(false);
 
 $('share').onclick = async () => {
   if (!lastRaw) return;
-  const text = 'SWINGPLANE_V23_RAW ' + JSON.stringify(lastRaw);
+  const text = 'SWINGPLANE_V24_RAW ' + JSON.stringify(lastRaw);
   try {
     await navigator.clipboard.writeText(text);
     setStatus('raw swing copied', true);
@@ -635,6 +635,7 @@ function findTakeawayStart(sm,hz,trigger){
   const movingRun=Math.max(5,Math.round(0.014*hz));
   let found=-1;
 
+  const rampGap=Math.max(movingRun,Math.round(0.12*hz));
   for(let i=searchStart+quietRun;i<=trigger-movingRun;i++){
     let quiet=true;
     for(let k=i-quietRun;k<i;k++){
@@ -642,9 +643,15 @@ function findTakeawayStart(sm,hz,trigger){
     }
     if(!quiet)continue;
 
-    let moving=true;
-    for(let k=i;k<i+movingRun;k++){
-      if(sm[k]<movingThreshold){moving=false;break;}
+    // A real takeaway RAMPS through the thresholds over several samples, so the
+    // sustained-motion run may begin up to ~0.12 s after the quiet window ends.
+    let moving=false;
+    for(let j=i;j<=Math.min(trigger-movingRun,i+rampGap);j++){
+      let ok=true;
+      for(let k=j;k<j+movingRun;k++){
+        if(sm[k]<movingThreshold){ok=false;break;}
+      }
+      if(ok){moving=true;break;}
     }
     if(moving)found=i; // keep the last quiet-to-moving transition before trigger
   }
@@ -683,7 +690,7 @@ function locateEvents(gyro,accel,hz,trigger){
   // the follow-through. A valid top is a speed valley bracketed by backswing
   // motion before it and a much faster downswing shortly after it.
   const topSearchStart=clamp(Math.max(start+Math.round(0.24*hz),trigger+Math.round(0.025*hz)),2,n-3);
-  const topSearchEnd=clamp(Math.min(start+Math.round(2.0*hz),trigger+Math.round(1.65*hz),n-Math.round(0.85*hz)-2),topSearchStart+1,n-3);
+  const topSearchEnd=clamp(Math.min(start+Math.round(2.0*hz),trigger+Math.round(1.65*hz),n-Math.round(0.30*hz)-2),topSearchStart+1,n-3);
   const localRadius=Math.max(3,Math.round(0.028*hz));
   const candidates=[];
 
@@ -699,10 +706,10 @@ function locateEvents(gyro,accel,hz,trigger){
     const valleyRatio=sm[i]/Math.max(bracket,1);
     const rise=after.value-sm[i];
 
-    if(before.value<75 || after.value<300) continue;
-    if(valleyRatio>0.72 || rise<180) continue;
-    if(backswingSeconds<0.24 || backswingSeconds>2.05) continue;
-    if(downswingSeconds<0.12 || downswingSeconds>0.78) continue;
+    if(before.value<60 || after.value<260) continue;
+    if(valleyRatio>0.78 || rise<150) continue;
+    if(backswingSeconds<0.20 || backswingSeconds>2.40) continue;
+    if(downswingSeconds<0.10 || downswingSeconds>0.85) continue;
 
     const valleyScore=1-clamp(valleyRatio,0,1);
     const downScore=clamp((after.value-300)/900,0,1);
@@ -716,10 +723,10 @@ function locateEvents(gyro,accel,hz,trigger){
   // Prefer the first high-quality candidate. This prevents a later pause after
   // the follow-through from beating the real top merely because it is quieter.
   candidates.sort((a,b)=>a.top-b.top);
-  let chosen=candidates.find(c=>c.confidence>=0.48) || null;
+  let chosen=candidates.find(c=>c.confidence>=0.42) || null;
   if(!chosen && candidates.length){
     chosen=candidates.reduce((best,c)=>c.confidence>best.confidence?c:best,candidates[0]);
-    if(chosen.confidence<0.40) chosen=null;
+    if(chosen.confidence<0.32) chosen=null;
   }
 
   if(!chosen){
@@ -737,7 +744,7 @@ function locateEvents(gyro,accel,hz,trigger){
   const speedPeak=downPeak.index;
   const downDuration=(speedPeak-top)/hz;
 
-  if(downPeak.value<300 || downDuration<0.12 || downDuration>0.80){
+  if(downPeak.value<260 || downDuration<0.10 || downDuration>0.85){
     return {valid:false,reason:'downswing peak not found',gmag,sm,start,top,impact:-1,
             speedPeak,topConfidence:chosen.confidence,impactConfidence:0};
   }
@@ -761,7 +768,7 @@ function locateEvents(gyro,accel,hz,trigger){
   const impact=(z>=5.0)?jerkPeak.index:speedPeak;
   const impactDuration=(impact-top)/hz;
 
-  const valid=impactDuration>=0.12 && impactDuration<=0.82 && chosen.confidence>=0.40;
+  const valid=impactDuration>=0.10 && impactDuration<=0.88 && chosen.confidence>=0.32;
   return {
     valid,
     reason:valid?'':'implausible top-to-impact timing',
@@ -781,8 +788,15 @@ function estimateBiasAndGravity(gyro,accel,trigger){
 
   let selected=quiet.slice(-40);
   if (selected.length<12){
-    const count=Math.min(Math.max(trigger,1),25);
-    selected=Array.from({length:count},(_,i)=>i);
+    // Never average "the first 25 samples regardless" — if the club was already
+    // moving there, real motion becomes bias. Use the quietest 25-sample window.
+    let bestStart=0,best=Infinity;
+    const limit=Math.max(1,Math.min(trigger,gyro.length)-25);
+    for(let i=0;i<limit;i++){
+      let s=0; for(let k=i;k<i+25;k++) s+=norm(gyro[k]);
+      if(s<best){best=s;bestStart=i;}
+    }
+    selected=Array.from({length:Math.min(25,gyro.length)},(_,i)=>bestStart+i);
   }
 
   let bias=[0,0,0], gravity=[0,0,0];
@@ -799,17 +813,20 @@ function integrateShaft(gyro,hz,bias,gravityUp,shaftUp){
   const dt=1/hz;
   const mapToWorld=initialFrame(gravityUp,shaftUp);
   const clubDirectionSensor=scale(unit(shaftUp),-1); // sensor/hands -> clubhead
-  const points=[];
+  const points=[];        // world frame — DISPLAY ONLY (azimuth depends on address lean)
+  const sensorPoints=[];  // club's own frame — all comparison and scoring happens here
   const valid=[];
   let q=[1,0,0,0];
   let firstClipped=gyro.length;
-  const rail=34.30; // MPU-6050 ±2000 dps rail in rad/s, with margin
+  let prevClipped=false;
+  const rail=34.75; // just under the true MPU-6050 ±2000 dps rail (34.9066 rad/s)
 
   for (let i=0;i<gyro.length;i++){
     if (i>0){
       const raw=gyro[i-1];
       const clipped=Math.abs(raw[0])>=rail||Math.abs(raw[1])>=rail||Math.abs(raw[2])>=rail;
-      if (clipped && firstClipped===gyro.length) firstClipped=i-1;
+      if (clipped && prevClipped && firstClipped===gyro.length) firstClipped=Math.max(0,i-2);
+      prevClipped=clipped;
       if (firstClipped===gyro.length){
         const w=sub(raw,bias);
         const magnitude=norm(w);
@@ -822,10 +839,12 @@ function integrateShaft(gyro,hz,bias,gravityUp,shaftUp){
       }
     }
 
-    points.push(unit(mapToWorld(rotateVector(q,clubDirectionSensor))));
+    const sensorPoint=unit(rotateVector(q,clubDirectionSensor));
+    sensorPoints.push(sensorPoint);
+    points.push(unit(mapToWorld(sensorPoint)));
     valid.push(i<firstClipped);
   }
-  return {points,valid,firstClipped};
+  return {points,sensorPoints,valid,firstClipped};
 }
 
 /* =========================== Swing analysis =========================== */
@@ -868,7 +887,10 @@ function analyzeSwing(gyro,accel,hz,trigger){
     return;
   }
 
-  const ownFit=fitPlane(orientation.points,top,usableEnd);
+  // Fit and grade in the CLUB'S OWN frame. The world frame's azimuth comes from the
+  // address lean direction; near-vertical addresses make it random swing-to-swing,
+  // which made the reference disc land anywhere from aligned to perpendicular.
+  const ownFit=fitPlane(orientation.sensorPoints,top,usableEnd);
   if (!ownFit || ownFit.sweep<25){
     setStatus('could not fit that swing');
     $('hint').textContent='not enough readable shaft movement — try again';
@@ -879,6 +901,14 @@ function analyzeSwing(gyro,accel,hz,trigger){
   }
 
   const building=mode==='build';
+  if (!building && coverage<0.6){
+    setStatus('not enough readable downswing');
+    $('hint').textContent=`only ${Math.round(coverage*100)}% of the downswing was readable — a score would be misleading`;
+    pendingCandidate=null;
+    refreshUI();
+    armSwing(false);
+    return;
+  }
   const gradingPlane=(!building&&refNormal)?refNormal:ownFit.normal;
 
   const deviations=[];
@@ -893,9 +923,9 @@ function analyzeSwing(gyro,accel,hz,trigger){
       continue;
     }
 
-    const point=orientation.points[i];
+    const point=orientation.sensorPoints[i];
     const deviation=rad2deg(Math.asin(clamp(Math.abs(dot(point,gradingPlane)),0,1)));
-    const previous=i>top?orientation.points[i-1]:point;
+    const previous=i>top?orientation.sensorPoints[i-1]:point;
     const weight=clamp(Math.acos(clamp(dot(previous,point),-1,1)),0.004,0.08);
 
     deviations.push(deviation);
@@ -912,7 +942,7 @@ function analyzeSwing(gyro,accel,hz,trigger){
   }
 
   const rms=Math.sqrt(weightedSquared/Math.max(totalWeight,1e-12));
-  const steepness=rad2deg(Math.acos(clamp(Math.abs(dot(ownFit.normal,[0,1,0])),0,1)));
+  const steepness=rad2deg(Math.acos(clamp(Math.abs(dot(ownFit.normal,initial.gravity)),0,1)));
   const planeShift=refNormal?rad2deg(angleBetween(ownFit.normal,refNormal)):0;
 
   // Build score is capture/planarity quality. Practice score is only reference similarity.
@@ -929,7 +959,11 @@ function analyzeSwing(gyro,accel,hz,trigger){
       fitRms:ownFit.rms
     };
   } else {
-    score=Math.round(clamp(100*(1-rms/SCORE_ZERO_RMS),0,100));
+    // A short controlled swing barely deviates point-by-point even off a tilted
+    // plane, so RMS alone under-reads it. The fitted-plane tilt vs the reference
+    // has no such blind spot; grade on whichever is worse.
+    const effectiveRms=Math.max(rms,planeShift*0.5);
+    score=Math.round(clamp(100*(1-effectiveRms/SCORE_ZERO_RMS),0,100));
     pendingCandidate=null;
   }
 
@@ -939,15 +973,16 @@ function analyzeSwing(gyro,accel,hz,trigger){
   const arcStart=Math.max(0,Math.min(swingStart,top));
   const arcDeviations=[];
   for(let i=arcStart;i<=usableEnd;i++){
-    const point=orientation.points[i];
+    const point=orientation.sensorPoints[i];
     arcDeviations.push(rad2deg(Math.asin(clamp(Math.abs(dot(point,gradingPlane)),0,1))));
   }
 
+  const mapToWorld=initialFrame(initial.gravity,shaftAxisSensor);
   lastArc={
     points:orientation.points.slice(arcStart,usableEnd+1),
     deviations:arcDeviations,
-    normal:gradingPlane,
-    ownNormal:ownFit.normal,
+    normal:unit(mapToWorld(gradingPlane)),
+    ownNormal:unit(mapToWorld(ownFit.normal)),
     topOffset:top-arcStart,
     impactOffset:usableEnd-arcStart
   };
@@ -975,13 +1010,15 @@ function analyzeSwing(gyro,accel,hz,trigger){
 
   $('welcome').style.display='none';
   $('readouts').style.display='block';
-  const color=score>=80?'var(--on)':score>=60?'var(--drift)':'var(--off)';
+  const color=building
+    ? (score>=80?'var(--on)':score>=60?'var(--drift)':'var(--off)')
+    : (score>=70?'var(--on)':score>=50?'var(--drift)':'var(--off)');
   $('score').textContent=score;
   $('score').style.color=color;
   $('scorelbl').innerHTML=building?'sample<br>quality':'reference<br>match';
   $('verdict').textContent=building
     ? (score>=80?'clean reference sample':score>=60?'usable, but loose':'redo this sample')
-    : (score>=80?'similar to reference':score>=60?'noticeably different':'far from reference');
+    : (score>=70?'on your plane ✓':score>=50?'close — a little off':'off your plane');
   $('verdict').style.color=color;
 
   $('leftAt').innerHTML=leftAt<0?'not detected<small> ✓</small>':`${Math.round(leftAt*100)}<small>% down</small>`;
