@@ -6,665 +6,990 @@
 <meta name="theme-color" content="#0E1512">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>SwingPlane</title>
+<title>SwingPlane v2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#0E1512; --panel:#16201B; --panel2:#1B2721; --hair:#2A3830;
-    --ink:#E8F0EA; --mut:#7E9488;
-    --on:#5FD08A; --drift:#E8B04B; --off:#E5654B; --accent:#5FD08A;
-    --disp:"Space Grotesk",system-ui,sans-serif; --body:"Inter",system-ui,sans-serif;
-  }
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
-  html,body{margin:0; height:100%}
-  body{
-    background:var(--bg); color:var(--ink); font-family:var(--body);
-    display:flex; flex-direction:column; min-height:100dvh;
-    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  }
-  header{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:16px 18px 12px; border-bottom:1px solid var(--hair);
-  }
-  .brand{font-family:var(--disp); font-weight:700; letter-spacing:.14em; font-size:15px}
-  .brand small{color:var(--mut); font-weight:500; letter-spacing:.2em; font-size:10px; display:block; margin-top:2px}
-  .status{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--mut)}
-  .dot{width:8px; height:8px; border-radius:50%; background:var(--off); box-shadow:0 0 0 0 rgba(95,208,138,.5)}
-  .dot.live{background:var(--on); animation:pulse 2s infinite}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(95,208,138,.4)}70%{box-shadow:0 0 0 7px rgba(95,208,138,0)}100%{box-shadow:0 0 0 0 rgba(95,208,138,0)}}
-
-  #stage{position:relative; flex:1 1 auto; min-height:44dvh}
-  #gl{position:absolute; inset:0; width:100%; height:100%; display:block}
-  .hint{
-    position:absolute; left:0; right:0; bottom:12px; text-align:center;
-    color:var(--mut); font-size:12px; letter-spacing:.03em; pointer-events:none;
-  }
-
-  .readouts{padding:14px 16px 6px; border-top:1px solid var(--hair)}
-  .hero{display:flex; align-items:baseline; gap:14px; margin-bottom:14px}
-  .hero .score{font-family:var(--disp); font-weight:700; font-size:64px; line-height:.9; font-variant-numeric:tabular-nums}
-  .hero .label{color:var(--mut); font-size:12px; letter-spacing:.16em; text-transform:uppercase}
-  .hero .verdict{margin-left:auto; text-align:right; font-family:var(--disp); font-weight:500; font-size:15px}
-
-  #strip{width:100%; height:18px; border-radius:6px; display:block; margin:2px 0 4px; border:1px solid var(--hair)}
-  .striplbl{display:flex; justify-content:space-between; color:var(--mut); font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:14px}
-  .refbar{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 16px 0; font-size:13px; color:var(--ink)}
-  .refbar #reftext{font-family:var(--disp); font-weight:500}
-  .mini{flex:0 0 auto; font-size:12px; padding:7px 12px; border-radius:8px}
-  .grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px}
-  .cell{background:var(--panel); border:1px solid var(--hair); border-radius:12px; padding:11px 12px}
-  .cell .k{color:var(--mut); font-size:10px; letter-spacing:.12em; text-transform:uppercase}
-  .cell .v{font-family:var(--disp); font-weight:500; font-size:21px; margin-top:5px; font-variant-numeric:tabular-nums}
-  .cell .v small{font-size:12px; color:var(--mut); font-weight:400; margin-left:3px}
-
-  .bar{display:flex; gap:10px; padding:14px 16px calc(16px + env(safe-area-inset-bottom))}
-  button{
-    flex:1; font-family:var(--disp); font-weight:500; font-size:15px; letter-spacing:.02em;
-    color:var(--bg); background:var(--accent); border:0; border-radius:12px; padding:15px;
-    transition:filter .15s, opacity .15s;
-  }
-  button.ghost{background:transparent; color:var(--ink); border:1px solid var(--hair)}
-  button:active{filter:brightness(1.08)}
-  button:disabled{opacity:.4}
-
-  .toggle{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--mut); padding:0 16px 4px}
-  .toggle b{color:var(--ink); font-weight:600}
-  .seg{display:inline-flex; border:1px solid var(--hair); border-radius:8px; overflow:hidden}
-  .seg span{padding:5px 12px; cursor:pointer}
-  .seg span.sel{background:var(--panel2); color:var(--ink)}
-
-  .empty{color:var(--mut); font-size:13px; text-align:center; line-height:1.5; max-width:280px; margin:0 auto}
+:root{
+  --bg:#0E1512; --panel:#16201B; --panel2:#1B2721; --hair:#2A3830;
+  --ink:#E8F0EA; --mut:#84978D; --on:#5FD08A; --drift:#E8B04B;
+  --off:#E5654B; --unknown:#56635C; --accent:#5FD08A;
+  --disp:"Space Grotesk",system-ui,sans-serif; --body:"Inter",system-ui,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink)}
+body{font-family:var(--body);display:flex;flex-direction:column;min-height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;border-bottom:1px solid var(--hair)}
+.brand{font-family:var(--disp);font-weight:700;letter-spacing:.13em;font-size:15px}.brand small{display:block;color:var(--mut);font-size:10px;font-weight:500;letter-spacing:.18em;margin-top:2px}
+.status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--off)}.dot.live{background:var(--on);animation:pulse 2s infinite}@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(95,208,138,.4)}70%{box-shadow:0 0 0 7px rgba(95,208,138,0)}100%{box-shadow:0 0 0 0 rgba(95,208,138,0)}}
+#stage{position:relative;flex:1 1 auto;min-height:42dvh}#gl{position:absolute;inset:0;width:100%;height:100%;display:block}.hint{position:absolute;left:16px;right:16px;bottom:12px;text-align:center;color:var(--mut);font-size:12px;pointer-events:none}
+.notice{margin:10px 16px 0;padding:10px 12px;border:1px solid var(--hair);border-radius:10px;background:var(--panel);color:var(--mut);font-size:11px;line-height:1.45}.notice b{color:var(--ink)}
+.toggle{display:flex;align-items:center;gap:8px;padding:8px 16px 4px;color:var(--mut);font-size:12px;flex-wrap:wrap}.seg{display:inline-flex;border:1px solid var(--hair);border-radius:8px;overflow:hidden}.seg span{padding:6px 11px;cursor:pointer}.seg span.sel{background:var(--panel2);color:var(--ink)}
+.refbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px 0;font-size:13px}.refbar #reftext{font-family:var(--disp);font-weight:500}.mini{flex:0 0 auto!important;font-size:12px!important;padding:7px 11px!important;border-radius:8px!important}
+.readouts{padding:14px 16px 6px;border-top:1px solid var(--hair)}.hero{display:flex;align-items:baseline;gap:14px;margin-bottom:13px}.score{font-family:var(--disp);font-size:62px;font-weight:700;line-height:.9;font-variant-numeric:tabular-nums}.scorelabel{color:var(--mut);font-size:11px;letter-spacing:.14em;text-transform:uppercase}.verdict{margin-left:auto;text-align:right;font-family:var(--disp);font-size:15px}
+#strip{width:100%;height:18px;border-radius:6px;display:block;border:1px solid var(--hair)}.striplbl{display:flex;justify-content:space-between;color:var(--mut);font-size:10px;letter-spacing:.1em;text-transform:uppercase;margin:5px 0 13px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.cell{background:var(--panel);border:1px solid var(--hair);border-radius:11px;padding:10px 11px}.cell .k{color:var(--mut);font-size:9px;letter-spacing:.11em;text-transform:uppercase}.cell .v{font-family:var(--disp);font-size:20px;font-weight:500;margin-top:4px;font-variant-numeric:tabular-nums}.cell small{font-size:11px;color:var(--mut);font-weight:400;margin-left:3px}
+.empty{color:var(--mut);font-size:13px;text-align:center;line-height:1.5;max-width:330px;margin:0 auto}.calbox{padding:14px 16px 4px}.calbox p{margin:0 0 10px;color:var(--mut);font-size:13px;line-height:1.5}.calbox b{color:var(--ink)}
+.bar{display:flex;gap:9px;flex-wrap:wrap;padding:12px 16px calc(16px + env(safe-area-inset-bottom))}.bar button{min-width:calc(50% - 5px)}button{flex:1;font-family:var(--disp);font-weight:500;font-size:14px;color:var(--bg);background:var(--accent);border:0;border-radius:11px;padding:14px;transition:filter .15s,opacity .15s}button.ghost{background:transparent;color:var(--ink);border:1px solid var(--hair)}button.warn{background:var(--drift);color:var(--bg)}button:active{filter:brightness(1.08)}button:disabled{opacity:.38}
+@media(min-width:700px){body{max-width:760px;margin:0 auto;border-left:1px solid var(--hair);border-right:1px solid var(--hair)}#stage{min-height:48vh}.grid{grid-template-columns:repeat(4,1fr)}}
 </style>
 </head>
 <body>
-  <header>
-    <div class="brand">SWINGPLANE<small>rotation-axis analyzer</small></div>
-    <div class="status"><span id="dot" class="dot"></span><span id="stat">not connected</span></div>
-  </header>
+<header>
+  <div class="brand">SWINGPLANE <small>shaft-orientation consistency analyzer · v2</small></div>
+  <div class="status"><span id="dot" class="dot"></span><span id="stat">not connected</span></div>
+</header>
 
-  <div id="stage">
-    <canvas id="gl"></canvas>
-    <div class="hint" id="hint">connect, then take a swing</div>
-  </div>
+<div class="notice"><b>What this measures:</b> shaft direction relative to your own saved swings. It does not directly measure clubhead path, face angle, target line, or whether the reference swing is technically good.</div>
 
-  <div class="toggle">
-    handedness&nbsp;
-    <span class="seg" id="hand"><span data-h="L" class="sel">Left</span><span data-h="R">Right</span></span>
-    &nbsp;&nbsp;view&nbsp;
-    <span class="seg" id="view"><span data-v="down" class="sel">Down-line</span><span data-v="face">Face-on</span></span>
-  </div>
+<div id="stage"><canvas id="gl"></canvas><div class="hint" id="hint">connect the sensor</div></div>
 
-  <div class="refbar" id="refchip" style="display:none">
-    <span id="reftext"></span>
-    <button id="lockref" class="mini" style="display:none">Lock now</button>
-  </div>
+<div class="toggle">
+  handedness <span class="seg" id="hand"><span data-h="L" class="sel">Left</span><span data-h="R">Right</span></span>
+  view <span class="seg" id="view"><span data-v="edge" class="sel">Plane edge</span><span data-v="face">Plane face</span></span>
+</div>
 
-  <div class="readouts" id="readouts" style="display:none">
-    <div class="hero">
-      <div class="score" id="score">--</div>
-      <div class="label" id="scorelbl">held on<br>plane</div>
-      <div class="verdict" id="verdict"></div>
-    </div>
-    <canvas id="strip" height="18"></canvas>
-    <div class="striplbl"><span>top of swing</span><span>impact</span></div>
-    <div class="grid">
-      <div class="cell"><div class="k">Left plane at</div><div class="v" id="leftAt">--</div></div>
-      <div class="cell"><div class="k">Max drift</div><div class="v" id="maxDrift">--<small>°</small></div></div>
-      <div class="cell"><div class="k">Your plane</div><div class="v" id="refAngle">--<small>°</small></div></div>
-    </div>
-  </div>
+<div class="refbar" id="refchip" style="display:none">
+  <span id="reftext"></span><button id="lockref" class="mini" style="display:none">Lock now</button>
+</div>
 
-  <div class="readouts" id="welcome">
-    <p class="empty">Clip the sensor below the grip, flash the ESP32-S3, then tap Connect.
-    Take a normal swing — the arc and your on-plane score appear here.</p>
-  </div>
+<div class="calbox" id="calbox" style="display:none">
+  <p><b>Mount calibration:</b> hold the club perfectly vertical with the clubhead pointing down. Keep it still, then tap Calibrate. Repeat whenever the sensor moves on the club.</p>
+</div>
 
-  <div class="bar">
-    <button id="connect">Connect</button>
-    <button id="keep" style="display:none">Keep sample</button>
-    <button id="redo" class="ghost" style="display:none">Redo</button>
-    <button id="newref" class="ghost" style="display:none">New reference</button>
-    <button id="rearm" class="ghost" style="display:none">Re-arm</button>
-    <button id="share" class="ghost" style="display:none">Share swing</button>
+<div class="readouts" id="readouts" style="display:none">
+  <div class="hero">
+    <div class="score" id="score">--</div>
+    <div class="scorelabel" id="scorelbl">reference<br>match</div>
+    <div class="verdict" id="verdict"></div>
   </div>
+  <canvas id="strip" height="18"></canvas>
+  <div class="striplbl"><span>top of swing</span><span>strike / bottom estimate</span></div>
+  <div class="grid">
+    <div class="cell"><div class="k">Left reference at</div><div class="v" id="leftAt">--</div></div>
+    <div class="cell"><div class="k">RMS drift</div><div class="v" id="rmsDrift">--<small>°</small></div></div>
+    <div class="cell"><div class="k">Plane steepness</div><div class="v" id="planeAngle">--<small>°</small></div></div>
+    <div class="cell"><div class="k">Usable downswing</div><div class="v" id="coverage">--<small>%</small></div></div>
+  </div>
+</div>
+
+<div class="readouts" id="welcome"><p class="empty">Flash the matching v2 firmware, open this page in Chrome on Android over HTTPS, connect by Bluetooth, calibrate the mount, and build a reference from three solid swings.</p></div>
+
+<div class="bar">
+  <button id="connect">Connect</button>
+  <button id="calibrate" class="warn" style="display:none">Calibrate mount</button>
+  <button id="keep" style="display:none">Keep sample</button>
+  <button id="redo" class="ghost" style="display:none">Redo</button>
+  <button id="newref" class="ghost" style="display:none">New reference</button>
+  <button id="rearm" class="ghost" style="display:none">Re-arm</button>
+  <button id="share" class="ghost" style="display:none">Copy raw swing</button>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-/* ============================ BLE ============================ */
-const SVC="b1a70000-5c2f-4b21-9c9e-1f0e2a5d7c10";
-const DATA="b1a70001-5c2f-4b21-9c9e-1f0e2a5d7c10";
-const CTRL="b1a70002-5c2f-4b21-9c9e-1f0e2a5d7c10";
+'use strict';
 
-let ctrlChar=null, device=null;
-const $=id=>document.getElementById(id);
-function setStat(t,live){ $("stat").textContent=t; $("dot").classList.toggle("live",!!live); }
+/* ============================== BLE ============================== */
+const SERVICE_UUID = 'b1a70000-5c2f-4b21-9c9e-1f0e2a5d7c10';
+const DATA_UUID    = 'b1a70001-5c2f-4b21-9c9e-1f0e2a5d7c10';
+const CTRL_UUID    = 'b1a70002-5c2f-4b21-9c9e-1f0e2a5d7c10';
+const CMD_ARM = 1, CMD_CALIBRATE = 2, CMD_RESET = 3;
+const PROTOCOL_VERSION = 2;
+const $ = id => document.getElementById(id);
 
-// incoming-packet reassembly (sequence-numbered, loss-detecting)
-let rx={active:false,need:0,gs:400,as:100,hz:500,bytes:null,seen:null,pkts:0};
-let rxTimer=null;
-function rxFail(msg){
-  rx.active=false; if(rxTimer){clearTimeout(rxTimer);rxTimer=null;}
-  setStat(msg,false); $("hint").textContent="swing dropped in transit — take another";
-  autoArm(2);
+let device = null;
+let ctrlChar = null;
+let connected = false;
+let receiveTimer = null;
+let lastRaw = null;
+
+let rx = {
+  active:false, count:0, hz:500, trigger:0, gyroScale:400, accelScale:100,
+  bytes:null, packets:0, seen:null
+};
+
+function setStatus(text, live=false){
+  $('stat').textContent = text;
+  $('dot').classList.toggle('live', !!live);
 }
-function onPacket(dv){
-  const b=new Uint8Array(dv.buffer);
-  // A header ALWAYS restarts reassembly. Previously a new swing's header could bleed
-  // into an unfinished one and get analysed as if it were the tail of the old swing.
-  if(b.length>=14 && b[0]===0xA5 && b[1]===0x5A){
-    const count=b[2]|(b[3]<<8); rx.hz=b[4]|(b[5]<<8);
-    rx.gs=dv.getFloat32(6,true); rx.as=dv.getFloat32(10,true);
-    rx.need=count*12; rx.bytes=new Uint8Array(rx.need);
-    rx.seen=new Set(); rx.pkts=Math.ceil(count/10); rx.active=true;
-    $("hint").textContent="reading swing…";
-    if(rxTimer)clearTimeout(rxTimer);
-    rxTimer=setTimeout(()=>{ if(rx.active) rxFail("swing incomplete — "+(rx.pkts-rx.seen.size)+" packets lost"); },2500);
+
+async function writeCommand(command){
+  if (!ctrlChar) return false;
+  try {
+    await ctrlChar.writeValue(Uint8Array.of(command));
+    return true;
+  } catch (error) {
+    console.error(error);
+    setStatus('Bluetooth write failed', false);
+    return false;
+  }
+}
+
+function failReceive(message){
+  rx.active = false;
+  if (receiveTimer) clearTimeout(receiveTimer);
+  receiveTimer = null;
+  setStatus(message, false);
+  $('hint').textContent = 'capture incomplete — re-arming';
+  setTimeout(() => armSwing(true), 700);
+}
+
+function onPacket(dataView){
+  const b = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+
+  // Mount-calibration result.
+  if (b.length >= 24 && b[0] === 0xC1 && b[1] === 0xA7){
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    const version = b[2];
+    const valid = b[3] === 1;
+    const axis = [dv.getFloat32(4,true), dv.getFloat32(8,true), dv.getFloat32(12,true)];
+    const gyroRms = dv.getFloat32(16,true);
+    const accelStd = dv.getFloat32(20,true);
+    finishCalibration(version, valid, axis, gyroRms, accelStd);
     return;
   }
-  if(rx.active && b.length>2){
-    const seq=b[0]|(b[1]<<8), off=seq*120, payload=b.subarray(2);
-    if(off>=0 && off+payload.length<=rx.need){ rx.bytes.set(payload,off); rx.seen.add(seq); }
-    if(rx.seen.size>=rx.pkts){
-      rx.active=false; if(rxTimer){clearTimeout(rxTimer);rxTimer=null;}
-      decodeSwing();
+
+  // A swing header always starts a fresh reassembly.
+  if (b.length >= 18 && b[0] === 0xA5 && b[1] === 0x5A){
+    const version = b[2];
+    if (version !== PROTOCOL_VERSION){
+      failReceive('firmware/app version mismatch');
+      return;
     }
+
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    rx.count = b[4] | (b[5] << 8);
+    rx.hz = b[6] | (b[7] << 8);
+    rx.trigger = b[8] | (b[9] << 8);
+    rx.gyroScale = dv.getFloat32(10,true);
+    rx.accelScale = dv.getFloat32(14,true);
+
+    if (rx.count < 80 || rx.count > 1200 || rx.hz < 250 || rx.hz > 800){
+      failReceive('invalid swing header');
+      return;
+    }
+
+    rx.bytes = new Uint8Array(rx.count * 12);
+    rx.packets = Math.ceil(rx.count / 10);
+    rx.seen = new Set();
+    rx.active = true;
+    $('hint').textContent = 'receiving swing…';
+
+    if (receiveTimer) clearTimeout(receiveTimer);
+    receiveTimer = setTimeout(() => {
+      if (rx.active) failReceive(`swing incomplete — ${rx.packets-rx.seen.size} packets lost`);
+    }, 4000);
+    return;
+  }
+
+  if (!rx.active || b.length <= 2) return;
+
+  const sequence = b[0] | (b[1] << 8);
+  const offset = sequence * 120;
+  const payload = b.subarray(2);
+  if (offset >= rx.bytes.length || offset + payload.length > rx.bytes.length) return;
+
+  rx.bytes.set(payload, offset);
+  rx.seen.add(sequence);
+
+  if (rx.seen.size >= rx.packets){
+    rx.active = false;
+    if (receiveTimer) clearTimeout(receiveTimer);
+    receiveTimer = null;
+    decodeSwing();
   }
 }
+
 function decodeSwing(){
-  const n=Math.floor(rx.need/12), dv=new DataView(rx.bytes.buffer);
-  const gyro=[],accel=[];
-  for(let i=0;i<n;i++){
-    const o=i*12;
-    gyro.push([dv.getInt16(o,true)/rx.gs, dv.getInt16(o+2,true)/rx.gs, dv.getInt16(o+4,true)/rx.gs]);   // rad/s
-    accel.push([dv.getInt16(o+6,true)/rx.as, dv.getInt16(o+8,true)/rx.as, dv.getInt16(o+10,true)/rx.as]); // m/s^2
+  const dv = new DataView(rx.bytes.buffer);
+  const gyro = [];
+  const accel = [];
+
+  for (let i=0; i<rx.count; i++){
+    const offset = i * 12;
+    gyro.push([
+      dv.getInt16(offset,true) / rx.gyroScale,
+      dv.getInt16(offset+2,true) / rx.gyroScale,
+      dv.getInt16(offset+4,true) / rx.gyroScale
+    ]);
+    accel.push([
+      dv.getInt16(offset+6,true) / rx.accelScale,
+      dv.getInt16(offset+8,true) / rx.accelScale,
+      dv.getInt16(offset+10,true) / rx.accelScale
+    ]);
   }
-  // stash the raw swing for the Share button (debug: paste to Claude)
-  let s=''; const u=rx.bytes;
-  for(let i=0;i<u.length;i+=8192) s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));
-  lastRaw={hz:rx.hz, gs:rx.gs, as:rx.as, n:n, b64:btoa(s)};
-  $("share").style.display='';
-  analyze(gyro,accel,rx.hz);
-}
 
-// ---- reference-swing pool (average a few good swings into one plane) ----
-let mode='build', pool=[], refNormal=null, refG0=null, isConn=false, pendingNref=null;
-let lastRaw=null;
-$("share").onclick=async()=>{
-  if(!lastRaw)return;
-  const txt="SWINGPLANE_RAW "+JSON.stringify(lastRaw);
-  try{ await navigator.clipboard.writeText(txt); setStat("swing copied — paste it to Claude",true); }
-  catch(e){ window.prompt("Copy this and paste it to Claude:", txt); }
-};
-const REF_TARGET=3;
-
-function rebuildRef(){
-  if(!pool.length){ refNormal=null; refG0=null; return; }
-  const anchor=pool[0].normal; let acc=[0,0,0], W=0, ga=[0,0,0];
-  for(const p of pool){ const nn=dot(p.normal,anchor)<0?scl(p.normal,-1):p.normal; acc=add(acc,scl(nn,p.w)); W+=p.w; ga=add(ga,p.g0||[0,1,0]); }
-  refNormal=unit(scl(acc,1/(W||1)));
-  refG0=unit(scl(ga,1/pool.length));
-}
-async function rearm(quiet){ try{ await ctrlChar.writeValue(Uint8Array.of(1)); if(!quiet) setStat("armed — swing away",true);}catch(e){} }
-
-// ---- auto re-arm: it sets itself between swings, no button needed ----
-const READY_DELAY=4;              // seconds after a swing before it arms itself
-let armTimer=null, armLeft=0;
-function cancelAutoArm(){ if(armTimer){ clearInterval(armTimer); armTimer=null; } }
-function autoArm(delay){
-  cancelAutoArm();
-  if(!isConn) return;
-  armLeft = (delay===undefined) ? READY_DELAY : delay;
-  const tick=()=>{
-    if(armLeft<=0){ cancelAutoArm(); rearm(true);
-      setStat("ready — swing away",true); $("hint").textContent="ready — swing away"; return; }
-    $("hint").textContent="ready in "+armLeft+"…";
-    armLeft--;
+  let binary = '';
+  for (let i=0; i<rx.bytes.length; i+=8192){
+    binary += String.fromCharCode.apply(null, rx.bytes.subarray(i, i+8192));
+  }
+  lastRaw = {
+    protocol:PROTOCOL_VERSION, hz:rx.hz, trigger:rx.trigger,
+    gyroScale:rx.gyroScale, accelScale:rx.accelScale,
+    count:rx.count, b64:btoa(binary)
   };
-  tick();
-  armTimer=setInterval(tick,1000);
-}
-// Watchdog: if a swing's header packet is lost the app never sees the swing and the
-// device stays disarmed forever ("stuck"). A quiet periodic re-arm recovers it.
-setInterval(()=>{ if(isConn && !rx.active && !armTimer) rearm(true); }, 15000);
-function refreshUI(){
-  const build=mode==='build', swing=pendingNref!==null;
-  $("connect").style.display = isConn?'none':'';
-  $("keep").style.display    = (isConn&&build&&swing)?'':'none';
-  $("redo").style.display    = (isConn&&build&&swing)?'':'none';
-  $("newref").style.display  = (isConn&&!build)?'':'none';
-  $("rearm").style.display   = (isConn&&!build)?'':'none';
-  $("refchip").style.display = isConn?'':'none';
-  if(build){
-    $("reftext").textContent = `Building your plane — ${pool.length} of ${REF_TARGET} swings kept`;
-    $("lockref").style.display = (pool.length>=2 && pool.length<REF_TARGET)?'':'none';
-  } else {
-    $("reftext").textContent = `Plane locked · averaged from ${pool.length} swings`;
-    $("lockref").style.display='none';
-  }
-}
-$("keep").onclick=()=>{ if(pendingNref){ pool.push(pendingNref); rebuildRef(); pendingNref=null;
-  if(pool.length>=REF_TARGET) mode='score'; rearm(); refreshUI(); } };
-$("redo").onclick=()=>{ pendingNref=null; rearm(); refreshUI(); };
-$("lockref").onclick=()=>{ if(pool.length>=2){ mode='score'; refreshUI(); } };
-$("newref").onclick=()=>{ cancelAutoArm(); pool=[]; refNormal=null; refG0=null; mode='build'; pendingNref=null; rearm(); refreshUI(); };
+  $('share').style.display = '';
 
-$("connect").onclick=async()=>{
-  if(!navigator.bluetooth){ alert("This browser has no Web Bluetooth. Use Chrome on Android."); return; }
-  try{
-    setStat("scanning…");
-    device=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]}]});
-    device.addEventListener('gattserverdisconnected',()=>{ isConn=false; setStat("disconnected"); refreshUI(); });
-    const gatt=await device.gatt.connect();
-    const svc=await gatt.getPrimaryService(SVC);
-    const data=await svc.getCharacteristic(DATA);
-    ctrlChar=await svc.getCharacteristic(CTRL);
-    await data.startNotifications();
-    data.addEventListener('characteristicvaluechanged',e=>onPacket(e.target.value));
-    isConn=true; setStat("connected — swing away",true);
-    $("hint").textContent="take a few good swings to set your plane";
+  analyzeSwing(gyro, accel, rx.hz, rx.trigger);
+}
+
+$('connect').onclick = async () => {
+  if (!navigator.bluetooth){
+    alert('Web Bluetooth is unavailable. Use Chrome on Android and serve this page over HTTPS.');
+    return;
+  }
+
+  try {
+    setStatus('scanning…');
+    device = await navigator.bluetooth.requestDevice({filters:[{services:[SERVICE_UUID]}]});
+    device.addEventListener('gattserverdisconnected', () => {
+      connected = false;
+      ctrlChar = null;
+      setStatus('disconnected');
+      refreshUI();
+    });
+
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    const dataChar = await service.getCharacteristic(DATA_UUID);
+    ctrlChar = await service.getCharacteristic(CTRL_UUID);
+    await dataChar.startNotifications();
+    dataChar.addEventListener('characteristicvaluechanged', event => onPacket(event.target.value));
+
+    connected = true;
+    setStatus('connected', true);
+    $('hint').textContent = shaftAxisSensor ? 'calibration loaded — build your reference' : 'calibrate the sensor mount first';
     refreshUI();
-  }catch(err){ setStat("connect failed"); console.error(err); }
+    if (shaftAxisSensor) await armSwing(true);
+  } catch (error) {
+    console.error(error);
+    setStatus('connect failed');
+  }
 };
-$("rearm").onclick=()=>{ cancelAutoArm(); rearm(); };
 
-/* ==================== math helpers ==================== */
-const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
-const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
-const scl=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
-const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
-const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
-const norm=a=>Math.hypot(a[0],a[1],a[2]);
-const unit=a=>{const n=norm(a)||1;return[a[0]/n,a[1]/n,a[2]/n];};
+/* =========================== Calibration =========================== */
+let shaftAxisSensor = null; // head -> hands, fixed in sensor coordinates
+try {
+  const saved = JSON.parse(localStorage.getItem('swingplane-v2-shaft-axis') || 'null');
+  if (Array.isArray(saved) && saved.length === 3 && saved.every(Number.isFinite)) shaftAxisSensor = unit(saved);
+} catch (_) {}
 
-// Jacobi eigen-decomposition of a symmetric 3x3 -> {vec:[3x[3]], val:[3]} ascending
-function eigSym3(A){
-  let a=[[A[0][0],A[0][1],A[0][2]],[A[1][0],A[1][1],A[1][2]],[A[2][0],A[2][1],A[2][2]]];
-  let V=[[1,0,0],[0,1,0],[0,0,1]];
-  for(let sweep=0;sweep<24;sweep++){
-    let off=Math.abs(a[0][1])+Math.abs(a[0][2])+Math.abs(a[1][2]);
-    if(off<1e-12)break;
-    for(const [p,q] of [[0,1],[0,2],[1,2]]){
-      if(Math.abs(a[p][q])<1e-14)continue;
-      const th=(a[q][q]-a[p][p])/(2*a[p][q]);
-      const t=Math.sign(th)/(Math.abs(th)+Math.sqrt(th*th+1));
-      const c=1/Math.sqrt(t*t+1), s=t*c;
-      for(let k=0;k<3;k++){
-        const akp=a[k][p], akq=a[k][q];
-        a[k][p]=c*akp-s*akq; a[k][q]=s*akp+c*akq;
-      }
-      for(let k=0;k<3;k++){
-        const apk=a[p][k], aqk=a[q][k];
-        a[p][k]=c*apk-s*aqk; a[q][k]=s*apk+c*aqk;
-      }
-      for(let k=0;k<3;k++){
-        const vkp=V[k][p], vkq=V[k][q];
-        V[k][p]=c*vkp-s*vkq; V[k][q]=s*vkp+c*vkq;
-      }
-    }
+$('calibrate').onclick = async () => {
+  if (!connected) return;
+  cancelAutoArm();
+  pendingCandidate = null;
+  setStatus('calibrating — hold perfectly still', true);
+  $('hint').textContent = 'club vertical · clubhead down · do not move';
+  await writeCommand(CMD_CALIBRATE);
+};
+
+function finishCalibration(version, valid, axis, gyroRms, accelStd){
+  if (version !== PROTOCOL_VERSION){
+    setStatus('calibration version mismatch');
+    return;
   }
-  const val=[a[0][0],a[1][1],a[2][2]];
-  const idx=[0,1,2].sort((i,j)=>val[i]-val[j]);
-  return {val:idx.map(i=>val[i]), vec:idx.map(i=>[V[0][i],V[1][i],V[2][i]])};
-}
 
-// weighted principal axis of a set of vectors (largest eigenvector of sum w u uT)
-function principalAxis(vecs,weights){
-  const M=[[0,0,0],[0,0,0],[0,0,0]]; let W=0;
-  for(let i=0;i<vecs.length;i++){
-    const u=vecs[i], w=weights[i]; W+=w;
-    for(let r=0;r<3;r++)for(let c=0;c<3;c++)M[r][c]+=w*u[r]*u[c];
+  if (!valid || !axis.every(Number.isFinite)){
+    setStatus('calibration failed — movement detected');
+    $('hint').textContent = `retry while still · motion ${(gyroRms*57.2958).toFixed(1)}°/s · accel noise ${accelStd.toFixed(2)}`;
+    refreshUI();
+    return;
   }
-  if(W>0)for(let r=0;r<3;r++)for(let c=0;c<3;c++)M[r][c]/=W;
-  const e=eigSym3(M);
-  return e.vec[2]; // largest eigenvalue
-}
 
-/* ==================== swing analysis ==================== */
-let lastArc=null; // for viz
-
-const K_SCORE=16;      // deg of drift that = a zero score (tune to your baseline)
-const OFF_THRESH=7;    // deg off your plane that counts as "left it"
-
-function analyze(gyro,accel,hz){
-  const n=gyro.length, dt=1/hz, floor=0.3; // rad/s floor for a trustworthy axis
-  const gmag=gyro.map(g=>norm(g)*57.2958); // deg/s
-
-  // smooth |gyro|; impact ≈ global max, top-of-swing ≈ min between takeaway hump and impact
-  const sm=gmag.map((_,i)=>{let s=0,c=0;for(let k=-4;k<=4;k++){const j=i+k;if(j>=0&&j<n){s+=gmag[j];c++;}}return s/c;});
-  let iMax=0; for(let i=0;i<n;i++) if(sm[i]>sm[iMax]) iMax=i;
-  let tTop=Math.floor(iMax*0.4), lo=1e9;
-  for(let i=Math.floor(iMax*0.15);i<iMax;i++){ if(sm[i]<lo){lo=sm[i];tTop=i;} }
-  const s0=8;                                   // skip settling samples
-
-  // gravity at address -> "up" in sensor frame (for plane-tilt readout + viz)
-  let g0=[0,0,0]; const N0=Math.min(20,tTop);
-  for(let i=0;i<N0;i++) g0=add(g0,accel[i]);
-  g0=unit(scl(g0,1/N0));
-
-  // --- shaft axis (sensor frame) from centripetal accel near impact ---
-  // Needed BEFORE the plane fit: the club's roll/release spins about this axis and is
-  // NOT plane motion. Use fast, UNSATURATED samples (MPU-6050 accel rails at ±16g).
-  const ARAIL=16*9.81*0.98;
-  let sa=[0,0,0], cnt=0;
-  for(let i=tTop;i<=iMax;i++){
-    if(sm[i] < 0.6*sm[iMax]) continue;
-    const a=accel[i];
-    if(Math.abs(a[0])>ARAIL||Math.abs(a[1])>ARAIL||Math.abs(a[2])>ARAIL) continue;
-    sa=add(sa,a); cnt++;
-  }
-  const shaftUp = cnt>=3 ? unit(scl(sa,1/cnt)) : unit(g0);   // head -> hands
-  const deroll = w => sub(w, scl(shaftUp, dot(w,shaftUp)));  // strip the release spin
-
-  // --- this swing's own plane (candidate / reference building block) ---
-  // Only the FAST part of the downswing is trustworthy: below ~half peak speed the
-  // release roll rivals the swing rotation and the axis reading is meaningless.
-  const FASTGATE=0.5;
-  function axisIn(a,b,gate){
-    const V=[],W=[];
-    for(let i=a;i<b;i++){
-      if(gate>0 && sm[i] < gate*sm[iMax]) continue;
-      const w=deroll(gyro[i]); const m=norm(w); if(m<floor)continue;
-      V.push(scl(w,1/m)); W.push(m);
-    }
-    if(V.length<5)return null;
-    let ax=unit(principalAxis(V,W));
-    let s=0; for(let i=0;i<V.length;i++) s+=Math.sign(dot(V[i],ax))*W[i];
-    return s<0?scl(ax,-1):ax;
-  }
-  const Nself = axisIn(tTop,iMax+1,FASTGATE) || axisIn(tTop,iMax+1,0.3) || axisIn(tTop,iMax+1,0);
-  if(!Nself){ $("hint").textContent="couldn't read that swing — try again"; return; }
-
-  // downswing tightness -> weight when averaging (a steadier swing earns more trust)
-  let tse=0,tsw=0;
-  for(let i=tTop;i<iMax;i++){
-    if(sm[i] < FASTGATE*sm[iMax]) continue;
-    const w=deroll(gyro[i]); const m=norm(w); if(m<floor)continue;
-    const a=Math.acos(Math.min(1,Math.abs(dot(scl(w,1/m),Nself))))*57.2958; tse+=a*a; tsw++; }
-  const weight=1/(tse/(tsw||1)+1);
-
-  // grade against the AVERAGED reference once locked; otherwise against this swing itself
-  const Nplane = (mode==='score' && refNormal) ? refNormal : Nself;
-
-  // --- per-sample deviation from the plane (roll removed, sign-agnostic) ---
-  // Where the club is too slow to measure, hold the last trustworthy reading.
-  const dev=[]; let prev=0; const SAT=33;
-  for(let i=s0;i<=iMax;i++){
-    const g=gyro[i];
-    const clipped = Math.abs(g[0])>SAT||Math.abs(g[1])>SAT||Math.abs(g[2])>SAT;
-    const w=deroll(g), m=norm(w);
-    const weak = sm[i] < FASTGATE*sm[iMax];
-    let d = (m<floor||clipped||weak) ? prev : Math.acos(Math.min(1,Math.abs(dot(scl(w,1/m),Nplane))))*57.2958;
-    prev=d; dev.push(d);
-  }
-  const devSmooth=dev.map((_,i)=>{let s=0,c=0;for(let k=-2;k<=2;k++){const j=i+k;if(j>=0&&j<dev.length){s+=dev[j];c++;}}return s/c;});
-
-  // downswing slice (top -> impact) is what we score & strip — measurable samples only
-  const dTop=tTop-s0, dImp=iMax-s0;
-  let se=0,sw=0,maxDrift=0,leftAt=-1;
-  for(let i=dTop;i<=dImp;i++){
-    const idx=i+s0;
-    if(sm[idx] < FASTGATE*sm[iMax]) continue;   // roll-dominated: not a real plane reading
-    const w=norm(gyro[idx]); const d=devSmooth[i];
-    se+=w*d*d; sw+=w>0?w:0;
-    if(d>maxDrift)maxDrift=d;
-    if(leftAt<0 && d>OFF_THRESH) leftAt=(i-dTop)/(dImp-dTop);
-  }
-  const rms=Math.sqrt(se/(sw||1));
-  const score=Math.max(0,Math.min(100,Math.round(100*(1-rms/K_SCORE))));
-  const refTilt=Math.abs(90-Math.acos(Math.min(1,Math.abs(dot(Nplane,g0))))*57.2958);
-
-  // stash this swing so "Keep sample" can fold its plane into the average (build mode only)
-  pendingNref = (mode==='build') ? {normal:Nself, w:weight, g0:g0.slice()} : null;
-
-  // --- reconstruct the real shaft-direction arc, in a STABLE display frame ---
-  // Reuse the vetted shaft axis (fast, unsaturated samples); negate so the arc points
-  // at the CLUBHEAD -> the club swings down toward the ground.
-  const shaftAxis = scl(shaftUp, -1);
-  // Gyro bias: use the QUIETEST 20-sample window anywhere in the capture. The club is
-  // often already moving when the buffer opens, and using those samples would subtract
-  // real motion as "drift" and bend the whole arc.
-  let bias=[0,0,0], bq=1e9, bIdx=-1;
-  for(let i=0;i+20<=n;i++){ let s=0; for(let k=0;k<20;k++) s+=norm(gyro[i+k]); s/=20;
-    if(s<bq){ bq=s; bIdx=i; } }
-  if(bIdx>=0 && bq<0.15){   // only trust it if genuinely still (<~9 deg/s)
-    for(let k=0;k<20;k++) bias=add(bias,gyro[bIdx+k]); bias=scl(bias,1/20);
-  }
-  // Fixed display frame: gravity gives "up", the plane fixes the azimuth. In score mode
-  // we use the LOCKED reference gravity so the disc doesn't shift swing to swing.
-  const gUp = (mode==='score' && refG0) ? refG0 : g0;
-  const s_up = unit(gUp);
-  let hh = sub(Nplane, scl(s_up, dot(Nplane,s_up)));
-  const s_h = (norm(hh)>1e-3) ? unit(hh) : unit(cross(s_up,[1,0,0]));
-  const s_t = unit(cross(s_up, s_h));
-  const wU=[0,1,0], wH=[0,0,-1], wT=[-1,0,0];
-  const applyR = v => add(add(scl(wU,dot(v,s_up)), scl(wH,dot(v,s_h))), scl(wT,dot(v,s_t)));
-  const Nworld = unit(applyR(Nplane));
-  let q=[1,0,0,0];
-  const arc=[]; const devArc=[];
-  const SATA=33;   // ±2000 dps rail (rad/s) — don't integrate clipped samples
-  for(let i=0;i<n;i++){
-    const w=sub(gyro[i],bias), wm=norm(w);
-    const clipped = Math.abs(gyro[i][0])>SATA||Math.abs(gyro[i][1])>SATA||Math.abs(gyro[i][2])>SATA;
-    if(wm>1e-6 && !clipped){ const dq=quatFromAxisAngle(scl(w,1/wm), wm*dt); q=qmul(q,dq); }
-    if(i>=s0 && i<=iMax){ arc.push(applyR(rotVec(q, shaftAxis))); devArc.push(devSmooth[i-s0]); }
-  }
-  // Rigid-align the whole arc: keep its smooth integrated shape, but orient it so its
-  // downswing plane sits at exactly the MEASURED angle from the reference disc.
-  // (Nself vs Nplane is a direct sensor-frame measurement — no integration drift in it.)
-  {
-    const M=[[0,0,0],[0,0,0],[0,0,0]];
-    for(let i=dTop;i<=dImp && i<arc.length;i++){ const p=arc[i];
-      for(let r=0;r<3;r++)for(let c=0;c<3;c++)M[r][c]+=p[r]*p[c]; }
-    const e=eigSym3(M); let Na=unit(e.vec[0]);   // drawn arc's own downswing plane
-    const Nt=unit(applyR(Nself));                 // where that plane truly sits vs the disc
-    if(dot(Na,Nt)<0)Na=scl(Na,-1);
-    const qa=quatAlign(Na,Nt);
-    for(let i=0;i<arc.length;i++) arc[i]=rotVec(qa,arc[i]);
-  }
-  lastArc={arc,devArc,normal:Nworld,topIdx:dTop,hz};
-  drawSwing();
-  paintStrip(devSmooth.slice(dTop,dImp+1));
-
-  // --- UI ---
-  $("welcome").style.display="none"; $("readouts").style.display="block";
-  const col = score>=80?"var(--on)":score>=60?"var(--drift)":"var(--off)";
-  const building = mode==='build';
-  $("score").textContent=score; $("score").style.color=col;
-  $("scorelbl").innerHTML = building ? 'sample<br>quality' : 'held on<br>plane';
-  $("verdict").textContent = building
-    ? (score>=80?"clean sample":score>=60?"a little loose":"loose — maybe redo")
-    : (score>=80?"stayed on plane":score>=60?"drifted off":"came off plane");
-  $("verdict").style.color=col;
-  $("leftAt").innerHTML = leftAt<0 ? 'stayed on<small> ✓</small>' : Math.round(leftAt*100)+'<small>% down</small>';
-  $("leftAt").style.color = leftAt<0 ? 'var(--on)' : 'var(--ink)';
-  $("maxDrift").innerHTML=maxDrift.toFixed(0)+'<small>°</small>';
-  $("refAngle").innerHTML=refTilt.toFixed(0)+'<small>° steep</small>';
-  $("hint").textContent = building
-    ? "keep your good swings — the plane is their average"
-    : "disc = your averaged plane · drag to rotate";
-  // In practice mode it re-arms itself; in build mode Keep/Redo does it on tap.
-  if(!building) autoArm();
+  shaftAxisSensor = unit(axis);
+  localStorage.setItem('swingplane-v2-shaft-axis', JSON.stringify(shaftAxisSensor));
+  pool = [];
+  refNormal = null;
+  mode = 'build';
+  pendingCandidate = null;
+  setStatus('calibrated', true);
+  $('hint').textContent = 'take three solid swings to build your reference';
   refreshUI();
+  armSwing(true);
 }
 
-// paint the top-of-swing -> impact deviation strip
-function paintStrip(d){
-  const cv=$("strip"); const w=cv.clientWidth||cv.width, h=18;
-  cv.width=w*devicePixelRatio; cv.height=h*devicePixelRatio;
-  const ctx=cv.getContext('2d'); ctx.scale(devicePixelRatio,devicePixelRatio);
-  const col=v=>{ const t=Math.min(1,v/OFF_THRESH); return t<0.5
-    ? `rgb(${lerp(95,232,t*2)},${lerp(208,176,t*2)},${lerp(138,75,t*2)})`
-    : `rgb(${lerp(232,229,(t-.5)*2)},${lerp(176,101,(t-.5)*2)},${lerp(75,75,(t-.5)*2)})`; };
-  for(let x=0;x<w;x++){ const i=Math.min(d.length-1,Math.floor(x/w*d.length)); ctx.fillStyle=col(d[i]||0); ctx.fillRect(x,0,1,h); }
-}
-const lerp=(a,b,t)=>Math.round(a+(b-a)*Math.max(0,Math.min(1,t)));
+/* ======================== Reference workflow ======================== */
+const REF_TARGET = 3;
+let mode = 'build';
+let pool = [];
+let refNormal = null;
+let pendingCandidate = null;
+let autoArmTimer = null;
 
-/* ---- tiny quaternion kit (w,x,y,z) ---- */
-function quatFromAxisAngle(ax,ang){const h=ang/2,s=Math.sin(h);return[Math.cos(h),ax[0]*s,ax[1]*s,ax[2]*s];}
-function qmul(a,b){return[
-  a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3],
-  a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],
-  a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1],
-  a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]];}
-function rotVec(q,v){
-  const [w,x,y,z]=q; const t=[2*(y*v[2]-z*v[1]),2*(z*v[0]-x*v[2]),2*(x*v[1]-y*v[0])];
-  return[v[0]+w*t[0]+(y*t[2]-z*t[1]), v[1]+w*t[1]+(z*t[0]-x*t[2]), v[2]+w*t[2]+(x*t[1]-y*t[0])];
-}
-function quatAlign(from,to){ // shortest-arc quaternion rotating `from` onto `to`
-  from=unit(from); to=unit(to); const d=dot(from,to);
-  if(d>0.9999)return[1,0,0,0];
-  if(d<-0.9999){ let ax=cross([1,0,0],from); if(norm(ax)<1e-4)ax=cross([0,1,0],from); ax=unit(ax); return[0,ax[0],ax[1],ax[2]]; }
-  const ax=cross(from,to); const w=1+d; const q=[w,ax[0],ax[1],ax[2]]; const nq=Math.hypot(...q); return q.map(v=>v/nq);
+function rebuildReference(){
+  if (!pool.length){
+    refNormal = null;
+    return;
+  }
+
+  const anchor = pool[0].normal;
+  let sum = [0,0,0];
+  let totalWeight = 0;
+  for (const candidate of pool){
+    const aligned = dot(candidate.normal, anchor) < 0 ? scale(candidate.normal,-1) : candidate.normal;
+    sum = add(sum, scale(aligned, candidate.weight));
+    totalWeight += candidate.weight;
+  }
+  refNormal = unit(scale(sum, 1 / Math.max(totalWeight, 1e-9)));
 }
 
-/* ==================== three.js scene ==================== */
-let renderer,scene,cam,controls,arcObj,planeObj,grp;
-let golfer=null, clubObj=null, headObj=null, dispArc=[], animT=0;
-
-// Stick-figure golfer, hands at the hub. bodyDir = horizontal side the plane rises toward,
-// which is where a golfer actually stands (the plane climbs over the trail shoulder).
-function buildGolfer(bodyDir){
-  if(golfer){ scene.remove(golfer); golfer=null; }
-  golfer=new THREE.Group();
-  const M=new THREE.LineBasicMaterial({color:0x7E9488,transparent:true,opacity:0.85});
-  const V=(x,y,z)=>new THREE.Vector3(x,y,z);
-  const seg=(a,b)=>golfer.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a,b]),M));
-
-  const f=bodyDir.clone().multiplyScalar(-1);                    // faces the ball
-  const s=new THREE.Vector3(0,1,0).cross(f).normalize();         // along the target line
-  const B=bodyDir.clone().multiplyScalar(0.60);                  // stand back from the hub axis
-  const P=(fwd,up,side)=>V(B.x+f.x*fwd+s.x*side, up, B.z+f.z*fwd+s.z*side);
-
-  const HANDS=V(0,1.4,0);                                        // = the hub
-  const hipL=P(-0.05,1.15,-0.19), hipR=P(-0.05,1.15,0.19);
-  const shL =P( 0.12,1.72,-0.21), shR =P( 0.12,1.72,0.21);
-  const hipC=P(-0.05,1.15,0),     shC =P( 0.12,1.72,0);
-
-  seg(hipC,shC);                                                 // spine, tilted over the ball
-  seg(hipL,hipR); seg(shL,shR);                                  // hips + shoulders
-  seg(hipL,P(-0.12,0,-0.23)); seg(hipR,P(-0.12,0,0.23));         // legs to the floor
-  seg(shL,HANDS); seg(shR,HANDS);                                // arms converge on the hands
-
-  const head=new THREE.Mesh(new THREE.SphereGeometry(0.135,20,14),
-    new THREE.MeshBasicMaterial({color:0x7E9488,transparent:true,opacity:0.55}));
-  head.position.copy(P(0.17,1.95,0)); golfer.add(head);
-  scene.add(golfer);
+function cancelAutoArm(){
+  if (autoArmTimer) clearTimeout(autoArmTimer);
+  autoArmTimer = null;
 }
 
-function initGL(){
-  const cv=$("gl");
-  renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+async function armSwing(quiet=false){
+  cancelAutoArm();
+  if (!connected || !shaftAxisSensor) return;
+  const ok = await writeCommand(CMD_ARM);
+  if (ok && !quiet){
+    setStatus('armed — swing away', true);
+    $('hint').textContent = 'armed — swing away';
+  }
+}
+
+function autoArm(){
+  cancelAutoArm();
+  if (!connected || !shaftAxisSensor || mode !== 'score') return;
+  $('hint').textContent = 're-arming…';
+  autoArmTimer = setTimeout(() => armSwing(false), 2200);
+}
+
+$('keep').onclick = () => {
+  if (!pendingCandidate) return;
+  pool.push(pendingCandidate);
+  pendingCandidate = null;
+  rebuildReference();
+  if (pool.length >= REF_TARGET) mode = 'score';
+  refreshUI();
+  armSwing(false);
+};
+
+$('redo').onclick = () => {
+  pendingCandidate = null;
+  refreshUI();
+  armSwing(false);
+};
+
+$('lockref').onclick = () => {
+  if (pool.length >= 2){
+    mode = 'score';
+    pendingCandidate = null;
+    refreshUI();
+    armSwing(false);
+  }
+};
+
+$('newref').onclick = () => {
+  cancelAutoArm();
+  pool = [];
+  refNormal = null;
+  pendingCandidate = null;
+  mode = 'build';
+  refreshUI();
+  armSwing(false);
+};
+
+$('rearm').onclick = () => armSwing(false);
+
+$('share').onclick = async () => {
+  if (!lastRaw) return;
+  const text = 'SWINGPLANE_V2_RAW ' + JSON.stringify(lastRaw);
+  try {
+    await navigator.clipboard.writeText(text);
+    setStatus('raw swing copied', true);
+  } catch (_) {
+    window.prompt('Copy this raw swing:', text);
+  }
+};
+
+function refreshUI(){
+  const calibrated = !!shaftAxisSensor;
+  const building = mode === 'build';
+  const hasCandidate = !!pendingCandidate;
+
+  $('connect').style.display = connected ? 'none' : '';
+  $('calibrate').style.display = connected ? '' : 'none';
+  $('calbox').style.display = connected ? '' : 'none';
+  $('refchip').style.display = connected && calibrated ? '' : 'none';
+  $('keep').style.display = connected && calibrated && building && hasCandidate ? '' : 'none';
+  $('redo').style.display = connected && calibrated && building && hasCandidate ? '' : 'none';
+  $('newref').style.display = connected && calibrated && !building ? '' : 'none';
+  $('rearm').style.display = connected && calibrated && !building ? '' : 'none';
+
+  if (!calibrated){
+    $('reftext').textContent = 'Mount calibration required';
+    $('lockref').style.display = 'none';
+    return;
+  }
+
+  if (building){
+    $('reftext').textContent = `Building your reference — ${pool.length} of ${REF_TARGET} swings kept`;
+    $('lockref').style.display = pool.length >= 2 && pool.length < REF_TARGET ? '' : 'none';
+  } else {
+    $('reftext').textContent = `Reference locked · averaged from ${pool.length} swings`;
+    $('lockref').style.display = 'none';
+  }
+}
+
+/* ============================== Math ============================== */
+const add = (a,b) => [a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+const sub = (a,b) => [a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+const scale = (a,s) => [a[0]*s,a[1]*s,a[2]*s];
+const dot = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross = (a,b) => [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const norm = a => Math.hypot(a[0],a[1],a[2]);
+const unit = a => { const n=norm(a); return n>1e-12 ? scale(a,1/n) : [0,1,0]; };
+const clamp = (x,lo,hi) => Math.max(lo,Math.min(hi,x));
+const rad2deg = r => r * 57.295779513;
+const angleBetween = (a,b) => Math.acos(clamp(Math.abs(dot(unit(a),unit(b))),0,1));
+
+function smooth(values, radius){
+  const out = new Array(values.length);
+  for (let i=0; i<values.length; i++){
+    let sum=0, count=0;
+    for (let k=-radius; k<=radius; k++){
+      const j=i+k;
+      if (j>=0 && j<values.length){ sum += values[j]; count++; }
+    }
+    out[i] = sum / Math.max(count,1);
+  }
+  return out;
+}
+
+function median(values){
+  if (!values.length) return 0;
+  const sorted = values.slice().sort((a,b)=>a-b);
+  const middle = Math.floor(sorted.length/2);
+  return sorted.length%2 ? sorted[middle] : 0.5*(sorted[middle-1]+sorted[middle]);
+}
+
+function eigSym3(A){
+  let a = A.map(row => row.slice());
+  let V = [[1,0,0],[0,1,0],[0,0,1]];
+
+  for (let sweep=0; sweep<28; sweep++){
+    const off = Math.abs(a[0][1])+Math.abs(a[0][2])+Math.abs(a[1][2]);
+    if (off < 1e-12) break;
+
+    for (const [p,q] of [[0,1],[0,2],[1,2]]){
+      if (Math.abs(a[p][q]) < 1e-14) continue;
+      const theta = (a[q][q]-a[p][p])/(2*a[p][q]);
+      const t = theta === 0 ? 1 : Math.sign(theta)/(Math.abs(theta)+Math.sqrt(theta*theta+1));
+      const c = 1/Math.sqrt(1+t*t);
+      const s = t*c;
+
+      for (let k=0; k<3; k++){
+        const akp=a[k][p], akq=a[k][q];
+        a[k][p]=c*akp-s*akq;
+        a[k][q]=s*akp+c*akq;
+      }
+      for (let k=0; k<3; k++){
+        const apk=a[p][k], aqk=a[q][k];
+        a[p][k]=c*apk-s*aqk;
+        a[q][k]=s*apk+c*aqk;
+      }
+      for (let k=0; k<3; k++){
+        const vkp=V[k][p], vkq=V[k][q];
+        V[k][p]=c*vkp-s*vkq;
+        V[k][q]=s*vkp+c*vkq;
+      }
+    }
+  }
+
+  const values = [a[0][0],a[1][1],a[2][2]];
+  const order = [0,1,2].sort((i,j)=>values[i]-values[j]);
+  return {
+    values:order.map(i=>values[i]),
+    vectors:order.map(i=>[V[0][i],V[1][i],V[2][i]])
+  };
+}
+
+function qmul(a,b){
+  return [
+    a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3],
+    a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],
+    a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1],
+    a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]
+  ];
+}
+
+function quatFromAxisAngle(axis, angle){
+  const half=angle/2, s=Math.sin(half);
+  return [Math.cos(half),axis[0]*s,axis[1]*s,axis[2]*s];
+}
+
+function rotateVector(q,v){
+  const [w,x,y,z]=q;
+  const t=[2*(y*v[2]-z*v[1]),2*(z*v[0]-x*v[2]),2*(x*v[1]-y*v[0])];
+  return [
+    v[0]+w*t[0]+(y*t[2]-z*t[1]),
+    v[1]+w*t[1]+(z*t[0]-x*t[2]),
+    v[2]+w*t[2]+(x*t[1]-y*t[0])
+  ];
+}
+
+function fitPlane(points, start, end){
+  if (end-start < 12) return null;
+  const M=[[0,0,0],[0,0,0],[0,0,0]];
+  const weights=[];
+  let totalWeight=0, sweep=0;
+
+  for (let i=start; i<=end; i++){
+    let w=0.004;
+    if (i>start){
+      const step=Math.acos(clamp(dot(unit(points[i-1]),unit(points[i])),-1,1));
+      sweep += step;
+      w = clamp(step,0.004,0.08);
+    }
+    weights.push(w);
+    totalWeight += w;
+    const p=unit(points[i]);
+    for (let r=0;r<3;r++) for (let c=0;c<3;c++) M[r][c]+=w*p[r]*p[c];
+  }
+
+  for (let r=0;r<3;r++) for (let c=0;c<3;c++) M[r][c]/=Math.max(totalWeight,1e-12);
+  const normal=unit(eigSym3(M).vectors[0]);
+
+  let squared=0;
+  for (let i=start; i<=end; i++){
+    const deviation=Math.asin(clamp(Math.abs(dot(unit(points[i]),normal)),0,1));
+    squared += weights[i-start]*deviation*deviation;
+  }
+
+  return {
+    normal,
+    rms:rad2deg(Math.sqrt(squared/Math.max(totalWeight,1e-12))),
+    sweep:rad2deg(sweep),
+    totalWeight
+  };
+}
+
+function initialFrame(gravityUpSensor, shaftUpSensor){
+  const sUp=unit(gravityUpSensor);
+  let sForward=sub(shaftUpSensor,scale(sUp,dot(shaftUpSensor,sUp)));
+
+  if (norm(sForward)<0.08){
+    const candidate=Math.abs(sUp[0])<0.8?[1,0,0]:[0,0,1];
+    sForward=cross(candidate,sUp);
+  }
+  sForward=unit(sForward);
+  const sAcross=unit(cross(sUp,sForward));
+
+  const wUp=[0,1,0], wForward=[0,0,-1], wAcross=[-1,0,0];
+  return vector => add(add(scale(wUp,dot(vector,sUp)),scale(wForward,dot(vector,sForward))),scale(wAcross,dot(vector,sAcross)));
+}
+
+function locateEvents(gyro,accel,hz,trigger){
+  const n=gyro.length;
+  const gmag=gyro.map(g=>rad2deg(norm(g)));
+  const sm=smooth(gmag,4);
+
+  let speedPeak=clamp(trigger,0,n-1);
+  for (let i=speedPeak;i<n;i++) if (sm[i]>sm[speedPeak]) speedPeak=i;
+
+  const jerk=new Array(n).fill(0);
+  for (let i=1;i<n;i++) jerk[i]=norm(sub(accel[i],accel[i-1]));
+  const jerkSm=smooth(jerk,1);
+
+  const windowStart=clamp(Math.max(trigger+Math.round(0.16*hz),speedPeak-Math.round(0.18*hz)),1,n-2);
+  const windowEnd=clamp(speedPeak+Math.round(0.20*hz),windowStart+1,n-1);
+  let impact=windowStart;
+  for (let i=windowStart;i<=windowEnd;i++) if (jerkSm[i]>jerkSm[impact]) impact=i;
+
+  const baselineEnd=Math.max(2,Math.min(trigger,Math.round(0.14*hz)));
+  const baselineValues=jerkSm.slice(1,baselineEnd);
+  const base=median(baselineValues);
+  const deviations=baselineValues.map(v=>Math.abs(v-base));
+  const sigma=1.4826*median(deviations)+0.03;
+  const z=(jerkSm[impact]-base)/sigma;
+  const impactConfidence=clamp((z-3)/12,0,1);
+  if (z<4.0) impact=speedPeak; // air swing or no clear strike spike
+
+  const topStart=clamp(trigger+Math.round(0.08*hz),1,impact-2);
+  const topEnd=clamp(impact-Math.round(0.08*hz),topStart+1,impact-1);
+  let top=topStart;
+  for (let i=topStart;i<=topEnd;i++) if (sm[i]<sm[top]) top=i;
+
+  if (top>=impact-8) top=Math.max(trigger,Math.floor((trigger+impact)*0.5));
+  return {gmag,sm,speedPeak,impact,impactConfidence,top};
+}
+
+function estimateBiasAndGravity(gyro,accel,trigger){
+  const quiet=[];
+  for (let i=0;i<Math.min(trigger,gyro.length);i++) if (rad2deg(norm(gyro[i]))<35) quiet.push(i);
+
+  let selected=quiet.slice(-40);
+  if (selected.length<12){
+    const count=Math.min(Math.max(trigger,1),25);
+    selected=Array.from({length:count},(_,i)=>i);
+  }
+
+  let bias=[0,0,0], gravity=[0,0,0];
+  for (const i of selected){
+    bias=add(bias,gyro[i]);
+    gravity=add(gravity,accel[i]);
+  }
+  bias=scale(bias,1/selected.length);
+  gravity=unit(scale(gravity,1/selected.length));
+  return {bias,gravity};
+}
+
+function integrateShaft(gyro,hz,bias,gravityUp,shaftUp){
+  const dt=1/hz;
+  const mapToWorld=initialFrame(gravityUp,shaftUp);
+  const clubDirectionSensor=scale(unit(shaftUp),-1); // sensor/hands -> clubhead
+  const points=[];
+  const valid=[];
+  let q=[1,0,0,0];
+  let firstClipped=gyro.length;
+  const rail=34.30; // MPU-6050 ±2000 dps rail in rad/s, with margin
+
+  for (let i=0;i<gyro.length;i++){
+    if (i>0){
+      const raw=gyro[i-1];
+      const clipped=Math.abs(raw[0])>=rail||Math.abs(raw[1])>=rail||Math.abs(raw[2])>=rail;
+      if (clipped && firstClipped===gyro.length) firstClipped=i-1;
+      if (firstClipped===gyro.length){
+        const w=sub(raw,bias);
+        const magnitude=norm(w);
+        if (magnitude>1e-7){
+          const dq=quatFromAxisAngle(scale(w,1/magnitude),magnitude*dt);
+          q=qmul(q,dq);
+          const qn=Math.hypot(q[0],q[1],q[2],q[3]);
+          q=q.map(v=>v/qn);
+        }
+      }
+    }
+
+    points.push(unit(mapToWorld(rotateVector(q,clubDirectionSensor))));
+    valid.push(i<firstClipped);
+  }
+  return {points,valid,firstClipped};
+}
+
+/* =========================== Swing analysis =========================== */
+const OFF_THRESHOLD = 7.0;
+const SCORE_ZERO_RMS = 14.0;
+let lastArc = null;
+
+function analyzeSwing(gyro,accel,hz,trigger){
+  if (!shaftAxisSensor){
+    setStatus('calibrate before analyzing');
+    return;
+  }
+
+  const events=locateEvents(gyro,accel,hz,trigger);
+  const initial=estimateBiasAndGravity(gyro,accel,trigger);
+  const orientation=integrateShaft(gyro,hz,initial.bias,initial.gravity,shaftAxisSensor);
+
+  const top=events.top;
+  const impact=events.impact;
+  const usableEnd=Math.min(impact,orientation.firstClipped-1);
+  const totalDown=Math.max(1,impact-top);
+  const coverage=clamp((usableEnd-top)/totalDown,0,1);
+
+  if (usableEnd-top<18){
+    setStatus('too much gyro saturation');
+    $('hint').textContent='sensor clipped before enough downswing was captured';
+    pendingCandidate=null;
+    refreshUI();
+    armSwing(false);
+    return;
+  }
+
+  const ownFit=fitPlane(orientation.points,top,usableEnd);
+  if (!ownFit || ownFit.sweep<25){
+    setStatus('could not fit that swing');
+    $('hint').textContent='not enough readable shaft movement — try again';
+    pendingCandidate=null;
+    refreshUI();
+    armSwing(false);
+    return;
+  }
+
+  const building=mode==='build';
+  const gradingPlane=(!building&&refNormal)?refNormal:ownFit.normal;
+
+  const deviations=[];
+  const weights=[];
+  let weightedSquared=0,totalWeight=0,maxDeviation=0;
+  let leftAt=-1,aboveRun=0;
+
+  for (let i=top;i<=impact;i++){
+    if (i>usableEnd){
+      deviations.push(null);
+      weights.push(0);
+      continue;
+    }
+
+    const point=orientation.points[i];
+    const deviation=rad2deg(Math.asin(clamp(Math.abs(dot(point,gradingPlane)),0,1)));
+    const previous=i>top?orientation.points[i-1]:point;
+    const weight=clamp(Math.acos(clamp(dot(previous,point),-1,1)),0.004,0.08);
+
+    deviations.push(deviation);
+    weights.push(weight);
+    weightedSquared+=weight*deviation*deviation;
+    totalWeight+=weight;
+    maxDeviation=Math.max(maxDeviation,deviation);
+
+    aboveRun=deviation>OFF_THRESHOLD?aboveRun+1:0;
+    if (leftAt<0&&aboveRun>=5){
+      const first=i-4;
+      leftAt=(first-top)/totalDown;
+    }
+  }
+
+  const rms=Math.sqrt(weightedSquared/Math.max(totalWeight,1e-12));
+  const steepness=rad2deg(Math.acos(clamp(Math.abs(dot(ownFit.normal,[0,1,0])),0,1)));
+  const planeShift=refNormal?rad2deg(angleBetween(ownFit.normal,refNormal)):0;
+
+  // Build score is capture/planarity quality. Practice score is only reference similarity.
+  let score;
+  if (building){
+    score=Math.round(clamp(
+      100-ownFit.rms*8-Math.max(0,60-ownFit.sweep)*0.45-Math.max(0,0.75-coverage)*80,
+      0,100
+    ));
+    pendingCandidate={
+      normal:ownFit.normal,
+      weight:clamp((score/100)/(1+ownFit.rms),0.03,1),
+      steepness,
+      fitRms:ownFit.rms
+    };
+  } else {
+    score=Math.round(clamp(100*(1-rms/SCORE_ZERO_RMS),0,100));
+    pendingCandidate=null;
+  }
+
+  lastArc={
+    points:orientation.points.slice(top,usableEnd+1),
+    deviations:deviations.slice(0,usableEnd-top+1),
+    normal:gradingPlane,
+    ownNormal:ownFit.normal
+  };
+  drawSwing();
+  paintStrip(deviations);
+
+  $('welcome').style.display='none';
+  $('readouts').style.display='block';
+  const color=score>=80?'var(--on)':score>=60?'var(--drift)':'var(--off)';
+  $('score').textContent=score;
+  $('score').style.color=color;
+  $('scorelbl').innerHTML=building?'sample<br>quality':'reference<br>match';
+  $('verdict').textContent=building
+    ? (score>=80?'clean reference sample':score>=60?'usable, but loose':'redo this sample')
+    : (score>=80?'similar to reference':score>=60?'noticeably different':'far from reference');
+  $('verdict').style.color=color;
+
+  $('leftAt').innerHTML=leftAt<0?'not detected<small> ✓</small>':`${Math.round(leftAt*100)}<small>% down</small>`;
+  $('rmsDrift').innerHTML=`${rms.toFixed(1)}<small>°</small>`;
+  $('planeAngle').innerHTML=`${steepness.toFixed(1)}<small>°</small>`;
+  $('coverage').innerHTML=`${Math.round(coverage*100)}<small>%</small>`;
+
+  if (building){
+    $('hint').textContent=`fit ${ownFit.rms.toFixed(1)}° · sweep ${ownFit.sweep.toFixed(0)}° · keep only a solid shot`;
+  } else {
+    const strikeText=events.impactConfidence>=0.35?'strike spike found':'bottom estimated from speed';
+    $('hint').textContent=`plane shift ${planeShift.toFixed(1)}° · ${strikeText} · gray = sensor saturation`;
+  }
+
+  setStatus('swing analyzed',true);
+  refreshUI();
+  if (!building) autoArm();
+}
+
+function paintStrip(values){
+  const canvas=$('strip');
+  const width=canvas.clientWidth||canvas.width;
+  const height=18;
+  canvas.width=Math.max(1,Math.floor(width*devicePixelRatio));
+  canvas.height=Math.floor(height*devicePixelRatio);
+  const ctx=canvas.getContext('2d');
+  ctx.scale(devicePixelRatio,devicePixelRatio);
+
+  const on=[95,208,138], drift=[232,176,75], off=[229,101,75], unknown=[86,99,92];
+  const mix=(a,b,t)=>a.map((v,i)=>Math.round(v+(b[i]-v)*clamp(t,0,1)));
+  const css=rgb=>`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+
+  for (let x=0;x<width;x++){
+    const index=Math.min(values.length-1,Math.floor(x/width*values.length));
+    const value=values[index];
+    let color=unknown;
+    if (value!==null&&Number.isFinite(value)){
+      const t=clamp(value/OFF_THRESHOLD,0,1);
+      color=t<0.5?mix(on,drift,t*2):mix(drift,off,(t-0.5)*2);
+    }
+    ctx.fillStyle=css(color);
+    ctx.fillRect(x,0,1,height);
+  }
+}
+
+/* =========================== Three.js view =========================== */
+let renderer,scene,camera,controls,group,arcObject,planeObject,clubObject,headObject;
+let displayArc=[];
+let animationTime=0;
+
+function initThree(){
+  const canvas=$('gl');
+  renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   scene=new THREE.Scene();
-  cam=new THREE.PerspectiveCamera(42,1,0.01,100); cam.position.set(2.6,1.4,2.6);
-  controls=new THREE.OrbitControls(cam,cv); controls.enableDamping=true; controls.enablePan=false;
-  scene.add(new THREE.AmbientLight(0xffffff,0.9));
-  const grid=new THREE.GridHelper(4,16,0x2A3830,0x1B2721); scene.add(grid);
-  // vertical reference post at the "ball"
-  const post=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,1.6,0)]),
-                            new THREE.LineBasicMaterial({color:0x2A3830}));
-  scene.add(post);
-  grp=new THREE.Group(); grp.position.y=1.4; scene.add(grp);   // = arc radius, so the
-  // clubhead's lowest point lands exactly on the floor at the centre of the grid
-  resize(); window.addEventListener('resize',resize);
-  let prev=performance.now();
-  (function loop(now){requestAnimationFrame(loop);
-    const dt=Math.min(0.05,((now||prev)-prev)/1000); prev=now||prev;
-    stepClub(dt); controls.update(); renderer.render(scene,cam);})();
+  camera=new THREE.PerspectiveCamera(42,1,0.01,100);
+  camera.position.set(3.5,2.0,3.5);
+  controls=new THREE.OrbitControls(camera,canvas);
+  controls.enableDamping=true;
+  controls.enablePan=false;
+
+  scene.add(new THREE.AmbientLight(0xffffff,0.95));
+  scene.add(new THREE.GridHelper(4,16,0x2A3830,0x1B2721));
+
+  group=new THREE.Group();
+  group.position.y=1.45;
+  scene.add(group);
+
+  const hub=new THREE.Mesh(
+    new THREE.SphereGeometry(0.045,16,12),
+    new THREE.MeshBasicMaterial({color:0x7E9488})
+  );
+  group.add(hub);
+
+  resizeThree();
+  window.addEventListener('resize',resizeThree);
+  let previous=performance.now();
+  (function loop(now){
+    requestAnimationFrame(loop);
+    const dt=Math.min(0.05,(now-previous)/1000);
+    previous=now;
+    animateClub(dt);
+    controls.update();
+    renderer.render(scene,camera);
+  })(previous);
 }
 
-// sweep the club along the captured arc, then pause and replay
-function stepClub(dt){
-  if(!clubObj||!dispArc.length) return;
-  animT+=dt;
-  const PLAY=2.2, HOLD=0.8;                       // seconds to sweep, then hold at impact
-  if(animT>PLAY+HOLD) animT=0;
-  const t=Math.min(1,animT/PLAY);
-  const i=Math.min(dispArc.length-1,Math.floor(t*(dispArc.length-1)));
-  const p=dispArc[i];
-  clubObj.geometry.setFromPoints([new THREE.Vector3(0,0,0),p]);
-  clubObj.geometry.attributes.position.needsUpdate=true;
-  headObj.position.copy(p);
+function resizeThree(){
+  const rect=$('stage').getBoundingClientRect();
+  renderer.setSize(rect.width,rect.height,false);
+  camera.aspect=rect.width/Math.max(rect.height,1);
+  camera.updateProjectionMatrix();
 }
-function resize(){ const s=$("stage").getBoundingClientRect(); renderer.setSize(s.width,s.height,false); cam.aspect=s.width/s.height; cam.updateProjectionMatrix(); }
+
+function animateClub(dt){
+  if (!clubObject||!displayArc.length) return;
+  animationTime+=dt;
+  const play=1.8,hold=0.7;
+  if (animationTime>play+hold) animationTime=0;
+  const t=Math.min(1,animationTime/play);
+  const index=Math.min(displayArc.length-1,Math.floor(t*(displayArc.length-1)));
+  const point=displayArc[index];
+  clubObject.geometry.setFromPoints([new THREE.Vector3(0,0,0),point]);
+  clubObject.geometry.attributes.position.needsUpdate=true;
+  headObject.position.copy(point);
+}
 
 function drawSwing(){
-  if(!lastArc)return;
-  if(arcObj)grp.remove(arcObj); if(planeObj)grp.remove(planeObj);
-  const {arc,devArc,normal}=lastArc;
-  const R=1.4; // display shaft length
-  const hand = document.querySelector('#hand .sel').dataset.h;
-  const mirror = hand==='L' ? -1 : 1;
+  if (!lastArc) return;
+  if (arcObject) group.remove(arcObject);
+  if (planeObject) group.remove(planeObject);
+  if (clubObject) group.remove(clubObject);
+  if (headObject) group.remove(headObject);
 
-  // colored arc by degrees off YOUR reference plane
-  const pos=[],col=[];
-  const c_on=new THREE.Color(0x5FD08A),c_dr=new THREE.Color(0xE8B04B),c_of=new THREE.Color(0xE5654B);
-  for(const [i,v] of arc.entries()){
-    pos.push(mirror*v[0]*R, v[1]*R, v[2]*R);
-    const d=Math.min(1,devArc[i]/OFF_THRESH); // OFF_THRESH deg = fully off
-    const c = d<0.5 ? c_on.clone().lerp(c_dr,d*2) : c_dr.clone().lerp(c_of,(d-0.5)*2);
-    col.push(c.r,c.g,c.b);
+  const radius=1.4;
+  const mirror=document.querySelector('#hand .sel').dataset.h==='L'?-1:1;
+  const positions=[];
+  const colors=[];
+  const cOn=new THREE.Color(0x5FD08A),cDrift=new THREE.Color(0xE8B04B),cOff=new THREE.Color(0xE5654B);
+
+  for (let i=0;i<lastArc.points.length;i++){
+    const p=lastArc.points[i];
+    positions.push(mirror*p[0]*radius,p[1]*radius,p[2]*radius);
+    const deviation=lastArc.deviations[i]||0;
+    const t=clamp(deviation/OFF_THRESHOLD,0,1);
+    const color=t<0.5?cOn.clone().lerp(cDrift,t*2):cDrift.clone().lerp(cOff,(t-0.5)*2);
+    colors.push(color.r,color.g,color.b);
   }
-  const g=new THREE.BufferGeometry();
-  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
-  g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
-  arcObj=new THREE.Line(g,new THREE.LineBasicMaterial({vertexColors:true,linewidth:2}));
-  grp.add(arcObj);
 
-  // keep the arc in display coords so the club can sweep along it
-  dispArc=[];
-  for(let i=0;i<pos.length;i+=3) dispArc.push(new THREE.Vector3(pos[i],pos[i+1],pos[i+2]));
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+  arcObject=new THREE.Line(geometry,new THREE.LineBasicMaterial({vertexColors:true}));
+  group.add(arcObject);
 
-  // fitted downswing plane as a translucent disc through the origin
-  const nrm=new THREE.Vector3(mirror*normal[0],normal[1],normal[2]).normalize();
-  const disc=new THREE.Mesh(new THREE.CircleGeometry(R*1.05,48),
-    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.18,side:THREE.DoubleSide}));
-  disc.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),nrm);
-  planeObj=new THREE.Group(); planeObj.add(disc);
-  const ring=new THREE.Mesh(new THREE.RingGeometry(R*1.03,R*1.05,48),
-    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.6,side:THREE.DoubleSide}));
-  ring.quaternion.copy(disc.quaternion); planeObj.add(ring);
-  grp.add(planeObj);
+  displayArc=[];
+  for (let i=0;i<positions.length;i+=3) displayArc.push(new THREE.Vector3(positions[i],positions[i+1],positions[i+2]));
 
-  // --- golfer + swinging club ---
-  // The plane's steepest up-direction points to the side it climbs; that's where the
-  // golfer stands (the plane rises over the trail shoulder).
-  const up=new THREE.Vector3(0,1,0);
-  const hi=up.clone().sub(nrm.clone().multiplyScalar(up.dot(nrm)));
-  let bodyDir=new THREE.Vector3(hi.x,0,hi.z);
-  if(bodyDir.lengthSq()<1e-6) bodyDir.set(1,0,0);
-  buildGolfer(bodyDir.normalize());
+  const normal=new THREE.Vector3(mirror*lastArc.normal[0],lastArc.normal[1],lastArc.normal[2]).normalize();
+  planeObject=new THREE.Group();
+  const disc=new THREE.Mesh(
+    new THREE.CircleGeometry(radius*1.04,64),
+    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.16,side:THREE.DoubleSide})
+  );
+  disc.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),normal);
+  planeObject.add(disc);
+  const ring=new THREE.Mesh(
+    new THREE.RingGeometry(radius*1.025,radius*1.045,64),
+    new THREE.MeshBasicMaterial({color:0x5FD08A,transparent:true,opacity:0.62,side:THREE.DoubleSide})
+  );
+  ring.quaternion.copy(disc.quaternion);
+  planeObject.add(ring);
+  group.add(planeObject);
 
-  if(clubObj){grp.remove(clubObj);} if(headObj){grp.remove(headObj);}
-  clubObj=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),dispArc[0]||new THREE.Vector3(0,-R,0)]),
-                         new THREE.LineBasicMaterial({color:0xE8F0EA}));
-  grp.add(clubObj);
-  headObj=new THREE.Mesh(new THREE.SphereGeometry(0.055,14,10),
-                         new THREE.MeshBasicMaterial({color:0xE8F0EA}));
-  headObj.position.copy(dispArc[0]||new THREE.Vector3(0,-R,0)); grp.add(headObj);
-  animT=0;
-
+  clubObject=new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),displayArc[0]||new THREE.Vector3(0,-radius,0)]),
+    new THREE.LineBasicMaterial({color:0xE8F0EA})
+  );
+  group.add(clubObject);
+  headObject=new THREE.Mesh(new THREE.SphereGeometry(0.055,14,10),new THREE.MeshBasicMaterial({color:0xE8F0EA}));
+  headObject.position.copy(displayArc[0]||new THREE.Vector3(0,-radius,0));
+  group.add(headObject);
+  animationTime=0;
   setView();
 }
+
 function setView(){
-  const v=document.querySelector('#view .sel').dataset.v;
-  if(v==='down') cam.position.set(0.2,1.6,3.8); else cam.position.set(3.8,1.6,0.2);
-  controls.target.set(0,1.1,0);
+  const target=new THREE.Vector3(0,1.35,0);
+  controls.target.copy(target);
+
+  if (!lastArc){
+    camera.position.set(3.5,2.0,3.5);
+    return;
+  }
+
+  const mirror=document.querySelector('#hand .sel').dataset.h==='L'?-1:1;
+  const normal=new THREE.Vector3(mirror*lastArc.normal[0],lastArc.normal[1],lastArc.normal[2]).normalize();
+  const view=document.querySelector('#view .sel').dataset.v;
+  let direction;
+
+  if (view==='face') direction=normal.clone();
+  else {
+    direction=new THREE.Vector3(0,1,0).cross(normal).normalize();
+    if (direction.lengthSq()<1e-5) direction.set(1,0,0);
+  }
+
+  camera.position.copy(target.clone().add(direction.multiplyScalar(4.0)).add(new THREE.Vector3(0,0.45,0)));
+  camera.lookAt(target);
 }
 
-// segmented toggles
-document.querySelectorAll('.seg').forEach(seg=>{
-  seg.querySelectorAll('span').forEach(sp=>sp.onclick=()=>{
-    seg.querySelectorAll('span').forEach(x=>x.classList.remove('sel'));
-    sp.classList.add('sel');
-    if(seg.id==='hand') drawSwing(); else setView();
+document.querySelectorAll('.seg').forEach(segment => {
+  segment.querySelectorAll('span').forEach(option => {
+    option.onclick=()=>{
+      segment.querySelectorAll('span').forEach(item=>item.classList.remove('sel'));
+      option.classList.add('sel');
+      if (segment.id==='hand') drawSwing(); else setView();
+    };
   });
 });
 
-initGL();
+// Recover if the sensor is disarmed because a header notification was lost.
+setInterval(()=>{
+  if (connected&&shaftAxisSensor&&!rx.active&&!autoArmTimer&&!pendingCandidate&&mode==='score') writeCommand(CMD_ARM);
+},15000);
+
+initThree();
+refreshUI();
 </script>
 </body>
 </html>
