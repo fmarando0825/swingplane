@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0E1512">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>SwingPlane v2</title>
+<title>SwingPlane v2.2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -37,7 +37,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 </head>
 <body>
 <header>
-  <div class="brand">SWINGPLANE <small>shaft-orientation consistency analyzer · v2</small></div>
+  <div class="brand">SWINGPLANE <small>shaft-orientation consistency analyzer · v2.2</small></div>
   <div class="status"><span id="dot" class="dot"></span><span id="stat">not connected</span></div>
 </header>
 
@@ -74,7 +74,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
   </div>
 </div>
 
-<div class="readouts" id="welcome"><p class="empty">Flash the matching v2 firmware, open this page in Chrome on Android over HTTPS, connect by Bluetooth, calibrate the mount, and build a reference from three solid swings.</p></div>
+<div class="readouts" id="welcome"><p class="empty">Flash the matching v2.2 firmware, open this page in Chrome on Android over HTTPS, connect by Bluetooth, calibrate the mount, and build a reference from three solid swings.</p></div>
 
 <div class="bar">
   <button id="connect">Connect</button>
@@ -96,7 +96,7 @@ const SERVICE_UUID = 'b1a70000-5c2f-4b21-9c9e-1f0e2a5d7c10';
 const DATA_UUID    = 'b1a70001-5c2f-4b21-9c9e-1f0e2a5d7c10';
 const CTRL_UUID    = 'b1a70002-5c2f-4b21-9c9e-1f0e2a5d7c10';
 const CMD_ARM = 1, CMD_CALIBRATE = 2, CMD_RESET = 3;
-const PROTOCOL_VERSION = 2;
+const PROTOCOL_VERSION = 3;
 const $ = id => document.getElementById(id);
 
 let device = null;
@@ -104,6 +104,8 @@ let ctrlChar = null;
 let connected = false;
 let receiveTimer = null;
 let lastRaw = null;
+let calibrationTimer = null;
+let calibrationPending = false;
 
 let rx = {
   active:false, count:0, hz:500, trigger:0, gyroScale:400, accelScale:100,
@@ -117,8 +119,16 @@ function setStatus(text, live=false){
 
 async function writeCommand(command){
   if (!ctrlChar) return false;
+  const value = Uint8Array.of(command);
   try {
-    await ctrlChar.writeValue(Uint8Array.of(command));
+    // Prefer an acknowledged write because calibration must not be silently lost.
+    if (ctrlChar.properties.write && typeof ctrlChar.writeValueWithResponse === 'function') {
+      await ctrlChar.writeValueWithResponse(value);
+    } else if (ctrlChar.properties.writeWithoutResponse && typeof ctrlChar.writeValueWithoutResponse === 'function') {
+      await ctrlChar.writeValueWithoutResponse(value);
+    } else {
+      await ctrlChar.writeValue(value);
+    }
     return true;
   } catch (error) {
     console.error(error);
@@ -139,14 +149,15 @@ function failReceive(message){
 function onPacket(dataView){
   const b = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
 
-  // Mount-calibration result.
-  if (b.length >= 24 && b[0] === 0xC1 && b[1] === 0xA7){
+  // Mount-calibration result. Kept at exactly 20 bytes so it works with
+  // the default BLE ATT payload even when Android does not negotiate a larger MTU.
+  if (b.length >= 20 && b[0] === 0xC1 && b[1] === 0xA7){
     const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
     const version = b[2];
     const valid = b[3] === 1;
     const axis = [dv.getFloat32(4,true), dv.getFloat32(8,true), dv.getFloat32(12,true)];
-    const gyroRms = dv.getFloat32(16,true);
-    const accelStd = dv.getFloat32(20,true);
+    const gyroRms = dv.getUint16(16,true) / 10000; // rad/s
+    const accelStd = dv.getUint16(18,true) / 1000; // m/s²
     finishCalibration(version, valid, axis, gyroRms, accelStd);
     return;
   }
@@ -247,6 +258,9 @@ $('connect').onclick = async () => {
     device.addEventListener('gattserverdisconnected', () => {
       connected = false;
       ctrlChar = null;
+      calibrationPending = false;
+      if (calibrationTimer) clearTimeout(calibrationTimer);
+      calibrationTimer = null;
       setStatus('disconnected');
       refreshUI();
     });
@@ -272,22 +286,45 @@ $('connect').onclick = async () => {
 /* =========================== Calibration =========================== */
 let shaftAxisSensor = null; // head -> hands, fixed in sensor coordinates
 try {
-  const saved = JSON.parse(localStorage.getItem('swingplane-v2-shaft-axis') || 'null');
+  const saved = JSON.parse(localStorage.getItem('swingplane-v2.1-shaft-axis') || 'null');
   if (Array.isArray(saved) && saved.length === 3 && saved.every(Number.isFinite)) shaftAxisSensor = unit(saved);
 } catch (_) {}
 
 $('calibrate').onclick = async () => {
-  if (!connected) return;
+  if (!connected || calibrationPending) return;
   cancelAutoArm();
   pendingCandidate = null;
+  calibrationPending = true;
   setStatus('calibrating — hold perfectly still', true);
   $('hint').textContent = 'club vertical · clubhead down · do not move';
-  await writeCommand(CMD_CALIBRATE);
+  refreshUI();
+
+  const sent = await writeCommand(CMD_CALIBRATE);
+  if (!sent){
+    calibrationPending = false;
+    refreshUI();
+    return;
+  }
+
+  if (calibrationTimer) clearTimeout(calibrationTimer);
+  calibrationTimer = setTimeout(() => {
+    calibrationTimer = null;
+    calibrationPending = false;
+    setStatus('no calibration reply', false);
+    $('hint').textContent = 'flash the matching v2.1 firmware, reconnect, then retry';
+    refreshUI();
+  }, 3500);
 };
 
 function finishCalibration(version, valid, axis, gyroRms, accelStd){
+  if (calibrationTimer) clearTimeout(calibrationTimer);
+  calibrationTimer = null;
+  calibrationPending = false;
+
   if (version !== PROTOCOL_VERSION){
     setStatus('calibration version mismatch');
+    $('hint').textContent = 'the page and ESP32 firmware are not the same version';
+    refreshUI();
     return;
   }
 
@@ -299,7 +336,7 @@ function finishCalibration(version, valid, axis, gyroRms, accelStd){
   }
 
   shaftAxisSensor = unit(axis);
-  localStorage.setItem('swingplane-v2-shaft-axis', JSON.stringify(shaftAxisSensor));
+  localStorage.setItem('swingplane-v2.1-shaft-axis', JSON.stringify(shaftAxisSensor));
   pool = [];
   refNormal = null;
   mode = 'build';
@@ -396,7 +433,7 @@ $('rearm').onclick = () => armSwing(false);
 
 $('share').onclick = async () => {
   if (!lastRaw) return;
-  const text = 'SWINGPLANE_V2_RAW ' + JSON.stringify(lastRaw);
+  const text = 'SWINGPLANE_V21_RAW ' + JSON.stringify(lastRaw);
   try {
     await navigator.clipboard.writeText(text);
     setStatus('raw swing copied', true);
@@ -412,6 +449,8 @@ function refreshUI(){
 
   $('connect').style.display = connected ? 'none' : '';
   $('calibrate').style.display = connected ? '' : 'none';
+  $('calibrate').disabled = calibrationPending;
+  $('calibrate').textContent = calibrationPending ? 'Calibrating…' : 'Calibrate mount';
   $('calbox').style.display = connected ? '' : 'none';
   $('refchip').style.display = connected && calibrated ? '' : 'none';
   $('keep').style.display = connected && calibrated && building && hasCandidate ? '' : 'none';
@@ -582,10 +621,46 @@ function initialFrame(gravityUpSensor, shaftUpSensor){
   return vector => add(add(scale(wUp,dot(vector,sUp)),scale(wForward,dot(vector,sForward))),scale(wAcross,dot(vector,sAcross)));
 }
 
+function findTakeawayStart(sm,hz,trigger){
+  // Look backward through the long pre-trigger ring for the final transition
+  // from a genuinely quiet club to sustained motion. This is the visual start
+  // of the swing; it is intentionally separate from the firmware trigger.
+  const searchStart=Math.max(0,trigger-Math.round(0.58*hz));
+  const baselineEnd=Math.max(searchStart+1,Math.min(trigger,searchStart+Math.round(0.16*hz)));
+  const baseline=median(sm.slice(searchStart,baselineEnd));
+  const quietThreshold=Math.max(10,baseline+6);
+  const movingThreshold=Math.max(18,baseline+14);
+  const quietRun=Math.max(10,Math.round(0.035*hz));
+  const movingRun=Math.max(5,Math.round(0.014*hz));
+  let found=-1;
+
+  for(let i=searchStart+quietRun;i<=trigger-movingRun;i++){
+    let quiet=true;
+    for(let k=i-quietRun;k<i;k++){
+      if(sm[k]>quietThreshold){quiet=false;break;}
+    }
+    if(!quiet)continue;
+
+    let moving=true;
+    for(let k=i;k<i+movingRun;k++){
+      if(sm[k]<movingThreshold){moving=false;break;}
+    }
+    if(moving)found=i; // keep the last quiet-to-moving transition before trigger
+  }
+
+  if(found<0){
+    // Conservative fallback: show enough pre-trigger motion to avoid beginning
+    // in the middle of the backswing, without displaying the full idle buffer.
+    found=Math.max(searchStart,trigger-Math.round(0.32*hz));
+  }
+  return Math.max(searchStart,found-Math.round(0.035*hz));
+}
+
 function locateEvents(gyro,accel,hz,trigger){
   const n=gyro.length;
   const gmag=gyro.map(g=>rad2deg(norm(g)));
   const sm=smooth(gmag,4);
+  const start=findTakeawayStart(sm,hz,trigger);
 
   let speedPeak=clamp(trigger,0,n-1);
   for (let i=speedPeak;i<n;i++) if (sm[i]>sm[speedPeak]) speedPeak=i;
@@ -614,7 +689,7 @@ function locateEvents(gyro,accel,hz,trigger){
   for (let i=topStart;i<=topEnd;i++) if (sm[i]<sm[top]) top=i;
 
   if (top>=impact-8) top=Math.max(trigger,Math.floor((trigger+impact)*0.5));
-  return {gmag,sm,speedPeak,impact,impactConfidence,top};
+  return {gmag,sm,speedPeak,impact,impactConfidence,top,start};
 }
 
 function estimateBiasAndGravity(gyro,accel,trigger){
@@ -685,6 +760,7 @@ function analyzeSwing(gyro,accel,hz,trigger){
   const initial=estimateBiasAndGravity(gyro,accel,trigger);
   const orientation=integrateShaft(gyro,hz,initial.bias,initial.gravity,shaftAxisSensor);
 
+  const swingStart=events.start;
   const top=events.top;
   const impact=events.impact;
   const usableEnd=Math.min(impact,orientation.firstClipped-1);
@@ -765,11 +841,22 @@ function analyzeSwing(gyro,accel,hz,trigger){
     pendingCandidate=null;
   }
 
+  // Draw the complete detected swing from address/takeaway through the usable
+  // downswing. The score remains top-to-impact, but the visible trace no longer
+  // throws away the backswing.
+  const arcStart=Math.max(0,Math.min(swingStart,top));
+  const arcDeviations=[];
+  for(let i=arcStart;i<=usableEnd;i++){
+    const point=orientation.points[i];
+    arcDeviations.push(rad2deg(Math.asin(clamp(Math.abs(dot(point,gradingPlane)),0,1))));
+  }
+
   lastArc={
-    points:orientation.points.slice(top,usableEnd+1),
-    deviations:deviations.slice(0,usableEnd-top+1),
+    points:orientation.points.slice(arcStart,usableEnd+1),
+    deviations:arcDeviations,
     normal:gradingPlane,
-    ownNormal:ownFit.normal
+    ownNormal:ownFit.normal,
+    topOffset:top-arcStart
   };
   drawSwing();
   paintStrip(deviations);
@@ -791,10 +878,10 @@ function analyzeSwing(gyro,accel,hz,trigger){
   $('coverage').innerHTML=`${Math.round(coverage*100)}<small>%</small>`;
 
   if (building){
-    $('hint').textContent=`fit ${ownFit.rms.toFixed(1)}° · sweep ${ownFit.sweep.toFixed(0)}° · keep only a solid shot`;
+    $('hint').textContent=`full arc starts at detected takeaway · fit ${ownFit.rms.toFixed(1)}° · keep only a solid shot`;
   } else {
     const strikeText=events.impactConfidence>=0.35?'strike spike found':'bottom estimated from speed';
-    $('hint').textContent=`plane shift ${planeShift.toFixed(1)}° · ${strikeText} · gray = sensor saturation`;
+    $('hint').textContent=`full arc starts at detected takeaway · plane shift ${planeShift.toFixed(1)}° · ${strikeText}`;
   }
 
   setStatus('swing analyzed',true);
@@ -829,7 +916,7 @@ function paintStrip(values){
 }
 
 /* =========================== Three.js view =========================== */
-let renderer,scene,camera,controls,group,arcObject,planeObject,clubObject,headObject;
+let renderer,scene,camera,controls,group,arcObject,planeObject,clubObject,headObject,topMarker;
 let displayArc=[];
 let animationTime=0;
 
@@ -896,6 +983,7 @@ function drawSwing(){
   if (planeObject) group.remove(planeObject);
   if (clubObject) group.remove(clubObject);
   if (headObject) group.remove(headObject);
+  if (topMarker) group.remove(topMarker);
 
   const radius=1.4;
   const mirror=document.querySelector('#hand .sel').dataset.h==='L'?-1:1;
@@ -906,8 +994,8 @@ function drawSwing(){
   for (let i=0;i<lastArc.points.length;i++){
     const p=lastArc.points[i];
     positions.push(mirror*p[0]*radius,p[1]*radius,p[2]*radius);
-    const deviation=lastArc.deviations[i]||0;
-    const t=clamp(deviation/OFF_THRESHOLD,0,1);
+    const deviation=lastArc.deviations[i];
+    const t=clamp((Number.isFinite(deviation)?deviation:OFF_THRESHOLD)/OFF_THRESHOLD,0,1);
     const color=t<0.5?cOn.clone().lerp(cDrift,t*2):cDrift.clone().lerp(cOff,(t-0.5)*2);
     colors.push(color.r,color.g,color.b);
   }
@@ -920,6 +1008,15 @@ function drawSwing(){
 
   displayArc=[];
   for (let i=0;i<positions.length;i+=3) displayArc.push(new THREE.Vector3(positions[i],positions[i+1],positions[i+2]));
+
+  // Yellow marker identifies the detected top; animation begins at takeaway.
+  const topPoint=displayArc[Math.max(0,Math.min(displayArc.length-1,lastArc.topOffset||0))];
+  topMarker=new THREE.Mesh(
+    new THREE.SphereGeometry(0.065,16,12),
+    new THREE.MeshBasicMaterial({color:0xE8B04B})
+  );
+  if(topPoint)topMarker.position.copy(topPoint);
+  group.add(topMarker);
 
   const normal=new THREE.Vector3(mirror*lastArc.normal[0],lastArc.normal[1],lastArc.normal[2]).normalize();
   planeObject=new THREE.Group();
