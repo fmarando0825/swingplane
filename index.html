@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0E1512">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>SwingPlane v2.2</title>
+<title>SwingPlane v2.3</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -37,7 +37,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 </head>
 <body>
 <header>
-  <div class="brand">SWINGPLANE <small>shaft-orientation consistency analyzer · v2.2</small></div>
+  <div class="brand">SWINGPLANE <small>shaft-orientation consistency analyzer · v2.3</small></div>
   <div class="status"><span id="dot" class="dot"></span><span id="stat">not connected</span></div>
 </header>
 
@@ -47,7 +47,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 
 <div class="toggle">
   handedness <span class="seg" id="hand"><span data-h="L" class="sel">Left</span><span data-h="R">Right</span></span>
-  view <span class="seg" id="view"><span data-v="edge" class="sel">Plane edge</span><span data-v="face">Plane face</span></span>
+  view <span class="seg" id="view"><span data-v="edge" class="sel">Judge drift</span><span data-v="face">Plane face</span></span>
 </div>
 
 <div class="refbar" id="refchip" style="display:none">
@@ -65,7 +65,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
     <div class="verdict" id="verdict"></div>
   </div>
   <canvas id="strip" height="18"></canvas>
-  <div class="striplbl"><span>top of swing</span><span>strike / bottom estimate</span></div>
+  <div class="striplbl"><span>detected top</span><span>detected strike / speed peak</span></div>
   <div class="grid">
     <div class="cell"><div class="k">Left reference at</div><div class="v" id="leftAt">--</div></div>
     <div class="cell"><div class="k">RMS drift</div><div class="v" id="rmsDrift">--<small>°</small></div></div>
@@ -74,7 +74,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
   </div>
 </div>
 
-<div class="readouts" id="welcome"><p class="empty">Flash the matching v2.2 firmware, open this page in Chrome on Android over HTTPS, connect by Bluetooth, calibrate the mount, and build a reference from three solid swings.</p></div>
+<div class="readouts" id="welcome"><p class="empty">Flash the matching v2.3 firmware, open this page in Chrome on Android over HTTPS, connect by Bluetooth, calibrate the mount, and build a reference from three solid swings.</p></div>
 
 <div class="bar">
   <button id="connect">Connect</button>
@@ -96,7 +96,7 @@ const SERVICE_UUID = 'b1a70000-5c2f-4b21-9c9e-1f0e2a5d7c10';
 const DATA_UUID    = 'b1a70001-5c2f-4b21-9c9e-1f0e2a5d7c10';
 const CTRL_UUID    = 'b1a70002-5c2f-4b21-9c9e-1f0e2a5d7c10';
 const CMD_ARM = 1, CMD_CALIBRATE = 2, CMD_RESET = 3;
-const PROTOCOL_VERSION = 3;
+const PROTOCOL_VERSION = 4;
 const $ = id => document.getElementById(id);
 
 let device = null;
@@ -108,7 +108,7 @@ let calibrationTimer = null;
 let calibrationPending = false;
 
 let rx = {
-  active:false, count:0, hz:500, trigger:0, gyroScale:400, accelScale:100,
+  active:false, count:0, hz:500, trigger:0, flags:0, gyroScale:400, accelScale:100,
   bytes:null, packets:0, seen:null
 };
 
@@ -171,6 +171,7 @@ function onPacket(dataView){
     }
 
     const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    rx.flags = b[3];
     rx.count = b[4] | (b[5] << 8);
     rx.hz = b[6] | (b[7] << 8);
     rx.trigger = b[8] | (b[9] << 8);
@@ -237,7 +238,7 @@ function decodeSwing(){
     binary += String.fromCharCode.apply(null, rx.bytes.subarray(i, i+8192));
   }
   lastRaw = {
-    protocol:PROTOCOL_VERSION, hz:rx.hz, trigger:rx.trigger,
+    protocol:PROTOCOL_VERSION, hz:rx.hz, trigger:rx.trigger, flags:rx.flags,
     gyroScale:rx.gyroScale, accelScale:rx.accelScale,
     count:rx.count, b64:btoa(binary)
   };
@@ -286,7 +287,7 @@ $('connect').onclick = async () => {
 /* =========================== Calibration =========================== */
 let shaftAxisSensor = null; // head -> hands, fixed in sensor coordinates
 try {
-  const saved = JSON.parse(localStorage.getItem('swingplane-v2.1-shaft-axis') || 'null');
+  const saved = JSON.parse(localStorage.getItem('swingplane-v2.3-shaft-axis') || 'null');
   if (Array.isArray(saved) && saved.length === 3 && saved.every(Number.isFinite)) shaftAxisSensor = unit(saved);
 } catch (_) {}
 
@@ -311,7 +312,7 @@ $('calibrate').onclick = async () => {
     calibrationTimer = null;
     calibrationPending = false;
     setStatus('no calibration reply', false);
-    $('hint').textContent = 'flash the matching v2.1 firmware, reconnect, then retry';
+    $('hint').textContent = 'flash the matching v2.3 firmware, reconnect, then retry';
     refreshUI();
   }, 3500);
 };
@@ -336,7 +337,7 @@ function finishCalibration(version, valid, axis, gyroRms, accelStd){
   }
 
   shaftAxisSensor = unit(axis);
-  localStorage.setItem('swingplane-v2.1-shaft-axis', JSON.stringify(shaftAxisSensor));
+  localStorage.setItem('swingplane-v2.3-shaft-axis', JSON.stringify(shaftAxisSensor));
   pool = [];
   refNormal = null;
   mode = 'build';
@@ -433,7 +434,7 @@ $('rearm').onclick = () => armSwing(false);
 
 $('share').onclick = async () => {
   if (!lastRaw) return;
-  const text = 'SWINGPLANE_V21_RAW ' + JSON.stringify(lastRaw);
+  const text = 'SWINGPLANE_V23_RAW ' + JSON.stringify(lastRaw);
   try {
     await navigator.clipboard.writeText(text);
     setStatus('raw swing copied', true);
@@ -656,40 +657,122 @@ function findTakeawayStart(sm,hz,trigger){
   return Math.max(searchStart,found-Math.round(0.035*hz));
 }
 
+function rangePeak(values,start,end){
+  start=clamp(Math.floor(start),0,values.length-1);
+  end=clamp(Math.floor(end),start,values.length-1);
+  let index=start;
+  for(let i=start+1;i<=end;i++) if(values[i]>values[index]) index=i;
+  return {index,value:values[index]};
+}
+
+function rangeValley(values,start,end){
+  start=clamp(Math.floor(start),0,values.length-1);
+  end=clamp(Math.floor(end),start,values.length-1);
+  let index=start;
+  for(let i=start+1;i<=end;i++) if(values[i]<values[index]) index=i;
+  return {index,value:values[index]};
+}
+
 function locateEvents(gyro,accel,hz,trigger){
   const n=gyro.length;
   const gmag=gyro.map(g=>rad2deg(norm(g)));
-  const sm=smooth(gmag,4);
+  const sm=smooth(gmag,Math.max(2,Math.round(0.010*hz)));
   const start=findTakeawayStart(sm,hz,trigger);
 
-  let speedPeak=clamp(trigger,0,n-1);
-  for (let i=speedPeak;i<n;i++) if (sm[i]>sm[speedPeak]) speedPeak=i;
+  // Find the FIRST believable top, not the global minimum and not anything in
+  // the follow-through. A valid top is a speed valley bracketed by backswing
+  // motion before it and a much faster downswing shortly after it.
+  const topSearchStart=clamp(Math.max(start+Math.round(0.24*hz),trigger+Math.round(0.025*hz)),2,n-3);
+  const topSearchEnd=clamp(Math.min(start+Math.round(2.0*hz),trigger+Math.round(1.65*hz),n-Math.round(0.85*hz)-2),topSearchStart+1,n-3);
+  const localRadius=Math.max(3,Math.round(0.028*hz));
+  const candidates=[];
+
+  for(let i=topSearchStart;i<=topSearchEnd;i++){
+    const local=rangeValley(sm,i-localRadius,i+localRadius);
+    if(local.index!==i) continue;
+
+    const before=rangePeak(sm,Math.max(start,i-Math.round(0.62*hz)),i-Math.round(0.055*hz));
+    const after=rangePeak(sm,i+Math.round(0.10*hz),Math.min(n-1,i+Math.round(0.78*hz)));
+    const backswingSeconds=(i-start)/hz;
+    const downswingSeconds=(after.index-i)/hz;
+    const bracket=Math.min(before.value,after.value);
+    const valleyRatio=sm[i]/Math.max(bracket,1);
+    const rise=after.value-sm[i];
+
+    if(before.value<75 || after.value<300) continue;
+    if(valleyRatio>0.72 || rise<180) continue;
+    if(backswingSeconds<0.24 || backswingSeconds>2.05) continue;
+    if(downswingSeconds<0.12 || downswingSeconds>0.78) continue;
+
+    const valleyScore=1-clamp(valleyRatio,0,1);
+    const downScore=clamp((after.value-300)/900,0,1);
+    const backScore=clamp((before.value-75)/450,0,1);
+    const timingScore=1-clamp(Math.abs(downswingSeconds-0.34)/0.44,0,1);
+    const earlyPreference=1-clamp(Math.max(0,backswingSeconds-1.45)/0.65,0,1);
+    const confidence=0.42*valleyScore+0.24*downScore+0.12*backScore+0.16*timingScore+0.06*earlyPreference;
+    candidates.push({top:i,before,after,confidence,backswingSeconds,downswingSeconds});
+  }
+
+  // Prefer the first high-quality candidate. This prevents a later pause after
+  // the follow-through from beating the real top merely because it is quieter.
+  candidates.sort((a,b)=>a.top-b.top);
+  let chosen=candidates.find(c=>c.confidence>=0.48) || null;
+  if(!chosen && candidates.length){
+    chosen=candidates.reduce((best,c)=>c.confidence>best.confidence?c:best,candidates[0]);
+    if(chosen.confidence<0.40) chosen=null;
+  }
+
+  if(!chosen){
+    return {valid:false,reason:'top not found',gmag,sm,start,top:-1,impact:-1,
+            speedPeak:-1,topConfidence:0,impactConfidence:0};
+  }
+
+  const top=chosen.top;
+  // The real downswing must occur shortly after the detected top. Restricting
+  // this window is the critical fix: no movement in the late follow-through can
+  // become "impact" anymore, even when the firmware fills its whole buffer.
+  const peakStart=top+Math.round(0.105*hz);
+  const peakEnd=Math.min(n-1,top+Math.round(0.80*hz));
+  const downPeak=rangePeak(sm,peakStart,peakEnd);
+  const speedPeak=downPeak.index;
+  const downDuration=(speedPeak-top)/hz;
+
+  if(downPeak.value<300 || downDuration<0.12 || downDuration>0.80){
+    return {valid:false,reason:'downswing peak not found',gmag,sm,start,top,impact:-1,
+            speedPeak,topConfidence:chosen.confidence,impactConfidence:0};
+  }
 
   const jerk=new Array(n).fill(0);
-  for (let i=1;i<n;i++) jerk[i]=norm(sub(accel[i],accel[i-1]));
-  const jerkSm=smooth(jerk,1);
+  for(let i=1;i<n;i++) jerk[i]=norm(sub(accel[i],accel[i-1]));
+  const jerkSm=smooth(jerk,Math.max(1,Math.round(0.004*hz)));
 
-  const windowStart=clamp(Math.max(trigger+Math.round(0.16*hz),speedPeak-Math.round(0.18*hz)),1,n-2);
-  const windowEnd=clamp(speedPeak+Math.round(0.20*hz),windowStart+1,n-1);
-  let impact=windowStart;
-  for (let i=windowStart;i<=windowEnd;i++) if (jerkSm[i]>jerkSm[impact]) impact=i;
-
-  const baselineEnd=Math.max(2,Math.min(trigger,Math.round(0.14*hz)));
-  const baselineValues=jerkSm.slice(1,baselineEnd);
-  const base=median(baselineValues);
+  const baselineStart=Math.max(1,start-Math.round(0.16*hz));
+  const baselineEnd=Math.max(baselineStart+3,Math.min(trigger,start));
+  const baselineValues=jerkSm.slice(baselineStart,baselineEnd);
+  const base=median(baselineValues.length?baselineValues:[0]);
   const deviations=baselineValues.map(v=>Math.abs(v-base));
-  const sigma=1.4826*median(deviations)+0.03;
-  const z=(jerkSm[impact]-base)/sigma;
-  const impactConfidence=clamp((z-3)/12,0,1);
-  if (z<4.0) impact=speedPeak; // air swing or no clear strike spike
+  const sigma=1.4826*median(deviations.length?deviations:[0])+0.04;
 
-  const topStart=clamp(trigger+Math.round(0.08*hz),1,impact-2);
-  const topEnd=clamp(impact-Math.round(0.08*hz),topStart+1,impact-1);
-  let top=topStart;
-  for (let i=topStart;i<=topEnd;i++) if (sm[i]<sm[top]) top=i;
+  const jerkStart=Math.max(top+Math.round(0.12*hz),speedPeak-Math.round(0.16*hz));
+  const jerkEnd=Math.min(peakEnd,speedPeak+Math.round(0.16*hz));
+  const jerkPeak=rangePeak(jerkSm,jerkStart,jerkEnd);
+  const z=(jerkPeak.value-base)/sigma;
+  const impactConfidence=clamp((z-4)/12,0,1);
+  const impact=(z>=5.0)?jerkPeak.index:speedPeak;
+  const impactDuration=(impact-top)/hz;
 
-  if (top>=impact-8) top=Math.max(trigger,Math.floor((trigger+impact)*0.5));
-  return {gmag,sm,speedPeak,impact,impactConfidence,top,start};
+  const valid=impactDuration>=0.12 && impactDuration<=0.82 && chosen.confidence>=0.40;
+  return {
+    valid,
+    reason:valid?'':'implausible top-to-impact timing',
+    gmag,sm,start,top,impact,speedPeak,
+    topConfidence:chosen.confidence,
+    impactConfidence,
+    backswingSeconds:chosen.backswingSeconds,
+    downswingSeconds:impactDuration,
+    downPeakDps:downPeak.value,
+    captureFilled:n>=1200
+  };
 }
 
 function estimateBiasAndGravity(gyro,accel,trigger){
@@ -757,6 +840,15 @@ function analyzeSwing(gyro,accel,hz,trigger){
   }
 
   const events=locateEvents(gyro,accel,hz,trigger);
+  if (!events.valid){
+    setStatus('swing phase not recognized');
+    $('hint').textContent=`${events.reason} — no score given; take another normal swing`;
+    pendingCandidate=null;
+    if(lastRaw) lastRaw.analysis={valid:false,reason:events.reason,start:events.start,top:events.top,impact:events.impact,speedPeak:events.speedPeak};
+    refreshUI();
+    armSwing(false);
+    return;
+  }
   const initial=estimateBiasAndGravity(gyro,accel,trigger);
   const orientation=integrateShaft(gyro,hz,initial.bias,initial.gravity,shaftAxisSensor);
 
@@ -856,8 +948,28 @@ function analyzeSwing(gyro,accel,hz,trigger){
     deviations:arcDeviations,
     normal:gradingPlane,
     ownNormal:ownFit.normal,
-    topOffset:top-arcStart
+    topOffset:top-arcStart,
+    impactOffset:usableEnd-arcStart
   };
+
+  if(lastRaw){
+    lastRaw.analysis={
+      valid:true, score, building, start:swingStart, top, impact, usableEnd,
+      topConfidence:Number(events.topConfidence.toFixed(3)),
+      impactConfidence:Number(events.impactConfidence.toFixed(3)),
+      backswingSeconds:Number(events.backswingSeconds.toFixed(3)),
+      downswingSeconds:Number(events.downswingSeconds.toFixed(3)),
+      downPeakDps:Number(events.downPeakDps.toFixed(1)),
+      captureFilled:events.captureFilled,
+      rmsDrift:Number(rms.toFixed(3)),
+      ownFitRms:Number(ownFit.rms.toFixed(3)),
+      planeShift:Number(planeShift.toFixed(3)),
+      coverage:Number(coverage.toFixed(3)),
+      shaftAxisSensor:shaftAxisSensor.slice(),
+      referenceNormal:refNormal?refNormal.slice():null,
+      ownNormal:ownFit.normal.slice()
+    };
+  }
   drawSwing();
   paintStrip(deviations);
 
@@ -880,8 +992,8 @@ function analyzeSwing(gyro,accel,hz,trigger){
   if (building){
     $('hint').textContent=`full arc starts at detected takeaway · fit ${ownFit.rms.toFixed(1)}° · keep only a solid shot`;
   } else {
-    const strikeText=events.impactConfidence>=0.35?'strike spike found':'bottom estimated from speed';
-    $('hint').textContent=`full arc starts at detected takeaway · plane shift ${planeShift.toFixed(1)}° · ${strikeText}`;
+    const strikeText=events.impactConfidence>=0.20?'strike spike found':'first downswing speed peak used';
+    $('hint').textContent=`scored only yellow marker → strike · plane shift ${planeShift.toFixed(1)}° · ${strikeText}${events.captureFilled?' · full buffer ignored safely':''}`;
   }
 
   setStatus('swing analyzed',true);
@@ -916,7 +1028,7 @@ function paintStrip(values){
 }
 
 /* =========================== Three.js view =========================== */
-let renderer,scene,camera,controls,group,arcObject,planeObject,clubObject,headObject,topMarker;
+let renderer,scene,camera,controls,group,arcObject,scoreArcObject,shadowArcObject,planeObject,clubObject,headObject,topMarker,impactMarker;
 let displayArc=[];
 let animationTime=0;
 
@@ -980,31 +1092,56 @@ function animateClub(dt){
 function drawSwing(){
   if (!lastArc) return;
   if (arcObject) group.remove(arcObject);
+  if (scoreArcObject) group.remove(scoreArcObject);
+  if (shadowArcObject) group.remove(shadowArcObject);
   if (planeObject) group.remove(planeObject);
   if (clubObject) group.remove(clubObject);
   if (headObject) group.remove(headObject);
   if (topMarker) group.remove(topMarker);
+  if (impactMarker) group.remove(impactMarker);
 
   const radius=1.4;
   const mirror=document.querySelector('#hand .sel').dataset.h==='L'?-1:1;
   const positions=[];
-  const colors=[];
-  const cOn=new THREE.Color(0x5FD08A),cDrift=new THREE.Color(0xE8B04B),cOff=new THREE.Color(0xE5654B);
-
   for (let i=0;i<lastArc.points.length;i++){
     const p=lastArc.points[i];
     positions.push(mirror*p[0]*radius,p[1]*radius,p[2]*radius);
+  }
+
+  // Full capture is context only and is intentionally muted. The bright colored
+  // section from the yellow marker onward is the only part used by the score.
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  arcObject=new THREE.Line(geometry,new THREE.LineBasicMaterial({color:0x66736C,transparent:true,opacity:0.58}));
+  group.add(arcObject);
+
+  const scorePositions=[],scoreColors=[],shadowPositions=[];
+  const cOn=new THREE.Color(0x5FD08A),cDrift=new THREE.Color(0xE8B04B),cOff=new THREE.Color(0xE5654B);
+  const nVec=unit(lastArc.normal);
+  const scoreStart=Math.max(0,lastArc.topOffset||0);
+  const scoreEnd=Math.min(lastArc.points.length-1,lastArc.impactOffset??(lastArc.points.length-1));
+  for(let i=scoreStart;i<=scoreEnd;i++){
+    const p=lastArc.points[i];
+    scorePositions.push(mirror*p[0]*radius,p[1]*radius,p[2]*radius);
     const deviation=lastArc.deviations[i];
     const t=clamp((Number.isFinite(deviation)?deviation:OFF_THRESHOLD)/OFF_THRESHOLD,0,1);
     const color=t<0.5?cOn.clone().lerp(cDrift,t*2):cDrift.clone().lerp(cOff,(t-0.5)*2);
-    colors.push(color.r,color.g,color.b);
-  }
+    scoreColors.push(color.r,color.g,color.b);
 
-  const geometry=new THREE.BufferGeometry();
-  geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
-  geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
-  arcObject=new THREE.Line(geometry,new THREE.LineBasicMaterial({vertexColors:true}));
-  group.add(arcObject);
+    const projected=unit(sub(p,scale(nVec,dot(p,nVec))));
+    shadowPositions.push(mirror*projected[0]*radius,projected[1]*radius,projected[2]*radius);
+  }
+  const scoreGeometry=new THREE.BufferGeometry();
+  scoreGeometry.setAttribute('position',new THREE.Float32BufferAttribute(scorePositions,3));
+  scoreGeometry.setAttribute('color',new THREE.Float32BufferAttribute(scoreColors,3));
+  scoreArcObject=new THREE.Line(scoreGeometry,new THREE.LineBasicMaterial({vertexColors:true}));
+  group.add(scoreArcObject);
+
+  const shadowGeometry=new THREE.BufferGeometry();
+  shadowGeometry.setAttribute('position',new THREE.Float32BufferAttribute(shadowPositions,3));
+  shadowArcObject=new THREE.Line(shadowGeometry,new THREE.LineDashedMaterial({color:0xDCE7E0,transparent:true,opacity:0.38,dashSize:0.045,gapSize:0.035}));
+  shadowArcObject.computeLineDistances();
+  group.add(shadowArcObject);
 
   displayArc=[];
   for (let i=0;i<positions.length;i+=3) displayArc.push(new THREE.Vector3(positions[i],positions[i+1],positions[i+2]));
@@ -1017,6 +1154,14 @@ function drawSwing(){
   );
   if(topPoint)topMarker.position.copy(topPoint);
   group.add(topMarker);
+
+  const impactPoint=displayArc[Math.max(0,Math.min(displayArc.length-1,lastArc.impactOffset??(displayArc.length-1)))];
+  impactMarker=new THREE.Mesh(
+    new THREE.SphereGeometry(0.060,16,12),
+    new THREE.MeshBasicMaterial({color:0xE8F0EA})
+  );
+  if(impactPoint) impactMarker.position.copy(impactPoint);
+  group.add(impactMarker);
 
   const normal=new THREE.Vector3(mirror*lastArc.normal[0],lastArc.normal[1],lastArc.normal[2]).normalize();
   planeObject=new THREE.Group();
@@ -1075,7 +1220,7 @@ document.querySelectorAll('.seg').forEach(segment => {
     option.onclick=()=>{
       segment.querySelectorAll('span').forEach(item=>item.classList.remove('sel'));
       option.classList.add('sel');
-      if (segment.id==='hand') drawSwing(); else setView();
+      if (segment.id==='hand') drawSwing(); else { setView(); if(option.dataset.v==='face') $('hint').textContent='Plane-face view can hide off-plane distance — use Judge drift for scoring'; }
     };
   });
 });
